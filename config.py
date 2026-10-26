@@ -18,6 +18,8 @@ def ensure_ffmpeg_in_path() -> None:
 
     # Check common winget / local locations
     candidates = [
+        BASE_DIR / "runtime" / "bin",
+        BASE_DIR / "bin",
         Path(os.environ.get("LOCALAPPDATA", "")) / "Microsoft" / "WinGet" / "Packages",
         Path("C:/Program Files/ffmpeg/bin"),
         Path("C:/ffmpeg/bin")

@@ -1780,8 +1780,30 @@ with st.container(border=True):
     # Thread recommendation based on VRAM
     calc_threads = 3 if vram_val >= 12 else (2 if vram_val >= 8 else 1)
 
+    if "prev_vram" not in st.session_state:
+        st.session_state.prev_vram = vram_val
+        st.session_state.threads_slider = calc_threads
+    elif st.session_state.prev_vram != vram_val:
+        st.session_state.prev_vram = vram_val
+        st.session_state.threads_slider = calc_threads
+
+    curr_threads = st.session_state.get("threads_slider", calc_threads)
+
     with col_th:
-        num_threads_val = st.slider(f"Потоков обработки: {calc_threads}", min_value=1, max_value=5, value=calc_threads)
+        st.markdown(
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+            f'<span style="font-size:14px;color:#ECEBE6;">Потоков обработки</span>'
+            f'<span style="font-size:14px;font-weight:600;color:#C8F169;font-family:\'JetBrains Mono\',monospace;">{curr_threads}</span>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        num_threads_val = st.slider(
+            "Потоков обработки",
+            min_value=1,
+            max_value=5,
+            key="threads_slider",
+            label_visibility="collapsed"
+        )
 
     with col_btn:
         can_run = True

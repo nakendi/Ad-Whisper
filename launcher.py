@@ -77,6 +77,7 @@ else:
 def get_py_exec() -> str:
     base_dir = get_base_dir()
     candidates = [
+        base_dir / "runtime" / "python.exe",
         base_dir / ".venv" / "Scripts" / "python.exe",
         base_dir.parent / ".venv" / "Scripts" / "python.exe",
     ]
@@ -93,17 +94,17 @@ def get_py_exec() -> str:
 
 def setup_dll_paths():
     base_dir = get_base_dir()
-    venv_site = base_dir / ".venv" / "Lib" / "site-packages"
-    if venv_site.exists():
-        for pkg in ["nvidia/cublas/bin", "nvidia/cudnn/bin"]:
-            p = venv_site / Path(pkg)
-            if p.exists():
-                try:
-                    if hasattr(os, "add_dll_directory"):
-                        os.add_dll_directory(str(p))
-                    os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
-                except Exception:
-                    pass
+    for sp_candidate in [base_dir / "runtime" / "Lib" / "site-packages", base_dir / ".venv" / "Lib" / "site-packages"]:
+        if sp_candidate.exists():
+            for pkg in ["nvidia/cublas/bin", "nvidia/cudnn/bin"]:
+                p = sp_candidate / Path(pkg)
+                if p.exists():
+                    try:
+                        if hasattr(os, "add_dll_directory"):
+                            os.add_dll_directory(str(p))
+                        os.environ["PATH"] = str(p) + os.pathsep + os.environ.get("PATH", "")
+                    except Exception:
+                        pass
 
 setup_dll_paths()
 
