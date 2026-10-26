@@ -1477,81 +1477,76 @@ components.html("""
 <script>
 (function(){
     var w = (window.parent && window.parent.document) ? window.parent : window;
-    if (w.__bsInited) return;
-    w.__bsInited = true;
-    w.__currentAudio = null;
-    w.__currentBtn = null;
+    if (w.document.getElementById("adwhisper_injected_script")) return;
 
-    w.bsToggleAudio = function(audioId, btnEl) {
-        var doc = w.document;
-        var audio = doc.getElementById(audioId);
-        if (!audio) return;
-        if (w.__currentAudio === audio && !audio.paused) {
-            audio.pause();
-            btnEl.classList.remove('is-playing');
-            w.updatePlayIcon(btnEl, false);
-            return;
-        }
-        if (w.__currentAudio && w.__currentAudio !== audio) {
-            w.__currentAudio.pause();
-            if (w.__currentBtn) {
-                w.__currentBtn.classList.remove('is-playing');
-                w.updatePlayIcon(w.__currentBtn, false);
+    var s = w.document.createElement("script");
+    s.id = "adwhisper_injected_script";
+    s.textContent = `
+        window.__currentAudio = null;
+        window.__currentBtn = null;
+
+        window.bsToggleAudio = function(audioId, btnEl) {
+            var audio = document.getElementById(audioId);
+            if (!audio) return;
+            if (window.__currentAudio === audio && !audio.paused) {
+                audio.pause();
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+                return;
             }
-        }
-        w.__currentAudio = audio;
-        w.__currentBtn = btnEl;
-        audio.play().then(function(){
-            btnEl.classList.add('is-playing');
-            w.updatePlayIcon(btnEl, true);
-        }).catch(function(e){ console.error('Audio play error:', e); });
-        audio.onended = function(){
-            btnEl.classList.remove('is-playing');
-            w.updatePlayIcon(btnEl, false);
-        };
-        audio.onpause = function(){
-            btnEl.classList.remove('is-playing');
-            w.updatePlayIcon(btnEl, false);
-        };
-    };
-
-    w.updatePlayIcon = function(btnEl, isPlaying) {
-        if (!btnEl) return;
-        var playSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
-        var pauseSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
-        btnEl.innerHTML = isPlaying ? pauseSvg : playSvg;
-    };
-
-    w.bsInitCardTrack = function(audioId, fillId, timeId) {
-        var doc = w.document;
-        var audio = doc.getElementById(audioId);
-        var fill = doc.getElementById(fillId);
-        var timeEl = doc.getElementById(timeId);
-        if (!audio) return;
-        audio.ontimeupdate = function(){
-            if (!audio.duration) return;
-            var pct = (audio.currentTime / audio.duration) * 100;
-            if (fill) fill.style.width = pct + '%';
-            if (timeEl) {
-                var curM = Math.floor(audio.currentTime / 60);
-                var curS = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
-                var durM = Math.floor(audio.duration / 60);
-                var durS = Math.floor(audio.duration % 60).toString().padStart(2, '0');
-                timeEl.textContent = curM + ':' + curS + ' / ' + durM + ':' + durS;
+            if (window.__currentAudio && window.__currentAudio !== audio) {
+                window.__currentAudio.pause();
+                if (window.__currentBtn) {
+                    window.__currentBtn.classList.remove('is-playing');
+                    window.updatePlayIcon(window.__currentBtn, false);
+                }
             }
+            window.__currentAudio = audio;
+            window.__currentBtn = btnEl;
+            audio.play().then(function(){
+                btnEl.classList.add('is-playing');
+                window.updatePlayIcon(btnEl, true);
+            }).catch(function(e){ console.error('Audio play error:', e); });
+            audio.onended = function(){
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+            };
+            audio.onpause = function(){
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+            };
         };
-    };
 
-    function copyToClipboardRobust(text) {
-        if (!text) {
-            console.warn("AdWhisper: no text to copy");
-            return Promise.resolve(false);
-        }
+        window.updatePlayIcon = function(btnEl, isPlaying) {
+            if (!btnEl) return;
+            var playSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
+            var pauseSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+            btnEl.innerHTML = isPlaying ? pauseSvg : playSvg;
+        };
 
-        function tryExecCommand(txt) {
-            var doc = (w && w.document) ? w.document : document;
-            var ta = doc.createElement("textarea");
-            ta.value = txt;
+        window.bsInitCardTrack = function(audioId, fillId, timeId) {
+            var audio = document.getElementById(audioId);
+            var fill = document.getElementById(fillId);
+            var timeEl = document.getElementById(timeId);
+            if (!audio) return;
+            audio.ontimeupdate = function(){
+                if (!audio.duration) return;
+                var pct = (audio.currentTime / audio.duration) * 100;
+                if (fill) fill.style.width = pct + '%';
+                if (timeEl) {
+                    var curM = Math.floor(audio.currentTime / 60);
+                    var curS = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
+                    var durM = Math.floor(audio.duration / 60);
+                    var durS = Math.floor(audio.duration % 60).toString().padStart(2, '0');
+                    timeEl.textContent = curM + ':' + curS + ' / ' + durM + ':' + durS;
+                }
+            };
+        };
+
+        function execCommandCopySync(text) {
+            var ta = document.createElement("textarea");
+            ta.value = text;
+            ta.setAttribute("readonly", "");
             ta.style.position = "fixed";
             ta.style.top = "0";
             ta.style.left = "0";
@@ -1565,142 +1560,132 @@ components.html("""
             ta.style.opacity = "0.01";
             ta.style.zIndex = "-99999";
             ta.setAttribute("aria-hidden", "true");
-            doc.body.appendChild(ta);
+            document.body.appendChild(ta);
             
-            var success = false;
+            var ok = false;
             try {
+                ta.removeAttribute("readonly");
                 ta.focus({ preventScroll: true });
                 ta.select();
                 ta.setSelectionRange(0, ta.value.length);
-                success = doc.execCommand("copy");
+                ok = document.execCommand("copy");
             } catch (err) {
-                console.warn("execCommand copy error:", err);
-                success = false;
+                ok = false;
             } finally {
                 if (ta.parentNode) {
-                    doc.body.removeChild(ta);
+                    document.body.removeChild(ta);
                 }
             }
-            return success;
+            return ok;
         }
 
-        var navClip = null;
-        try {
-            if (w && w.navigator && w.navigator.clipboard && typeof w.navigator.clipboard.writeText === "function") {
-                navClip = w.navigator.clipboard;
-            }
-        } catch (e) {}
-
-        if (navClip) {
-            return navClip.writeText(text).then(function() {
-                return true;
-            }).catch(function(err) {
-                console.warn("navigator.clipboard.writeText failed, using execCommand fallback:", err);
-                var ok = tryExecCommand(text);
-                return ok;
-            });
-        } else {
-            var ok = tryExecCommand(text);
-            return Promise.resolve(ok);
-        }
-    }
-
-    function showCopyToast(count, btnEl) {
-        var doc = (w && w.document) ? w.document : document;
-        var btn = btnEl || doc.getElementById("copy_links_btn_main");
-        
-        // Find anchor container attached directly to the copy button
-        var container = doc.getElementById("adwhisper_copy_toast_anchor");
-        if (!container && btn) {
-            var parent = btn.closest(".copy-btn-anchor-wrapper") || btn.parentNode;
-            container = parent ? parent.querySelector(".copy-button-toast-anchor") : null;
-            if (!container && parent) {
-                container = doc.createElement("div");
-                container.id = "adwhisper_copy_toast_anchor";
-                container.className = "copy-button-toast-anchor";
-                parent.appendChild(container);
-            }
-        }
-        if (!container) {
-            container = doc.body;
-        }
-        
-        // If 2 or more toasts are already present, immediately accelerate older toasts upward
-        var existing = container.querySelectorAll(".adwhisper-toast-pill");
-        if (existing.length >= 2) {
-            for (var j = 0; j < existing.length - 1; j++) {
-                var old = existing[j];
-                old.style.transition = "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
-                old.style.opacity = "0";
-                old.style.transform = "translateY(-30px) scale(0.82)";
-                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 200);
-            }
-        }
-        
-        var pill = doc.createElement("div");
-        pill.className = "adwhisper-toast-pill";
-        var countText = count ? (" (" + count + ")") : "";
-        pill.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
-        container.appendChild(pill);
-        
-        setTimeout(function() {
-            if (pill && pill.parentNode) {
-                pill.parentNode.removeChild(pill);
-            }
-        }, 1400);
-    }
-
-    w.bsHandleCopyClick = function(btn) {
-        if (!btn) return;
-        if (btn.__lastCopyTime && (Date.now() - btn.__lastCopyTime < 100)) return;
-        btn.__lastCopyTime = Date.now();
-
-        var textToCopy = btn.getAttribute("data-plain-text") || "";
-        if (!textToCopy) {
+        function copyTextEverywhere(text) {
+            if (!text) return false;
+            var ok = execCommandCopySync(text);
             try {
-                var raw = btn.getAttribute("data-links");
-                var links = JSON.parse(raw || "[]");
-                textToCopy = Array.isArray(links) ? links.join("\\n") : String(raw || "");
-            } catch(e) {
-                textToCopy = "";
+                if (window.navigator && window.navigator.clipboard && typeof window.navigator.clipboard.writeText === "function") {
+                    window.navigator.clipboard.writeText(text).catch(function(){});
+                }
+            } catch(e) {}
+            return ok;
+        }
+
+        function showCopyToast(count, btnEl) {
+            var btn = btnEl || document.getElementById("copy_links_btn_main");
+            var container = document.getElementById("adwhisper_copy_toast_anchor");
+            if (!container && btn) {
+                var parent = btn.closest(".copy-btn-anchor-wrapper") || btn.parentNode;
+                container = parent ? parent.querySelector(".copy-button-toast-anchor") : null;
+                if (!container && parent) {
+                    container = document.createElement("div");
+                    container.id = "adwhisper_copy_toast_anchor";
+                    container.className = "copy-button-toast-anchor";
+                    parent.appendChild(container);
+                }
             }
+            if (!container) container = document.body;
+
+            var existing = container.querySelectorAll(".adwhisper-toast-pill");
+            if (existing.length >= 2) {
+                for (var j = 0; j < existing.length - 1; j++) {
+                    var old = existing[j];
+                    old.style.transition = "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+                    old.style.opacity = "0";
+                    old.style.transform = "translateY(-30px) scale(0.82)";
+                    setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 200);
+                }
+            }
+            
+            var pill = document.createElement("div");
+            pill.className = "adwhisper-toast-pill";
+            if (!count || count === "0") {
+                pill.innerHTML = '<span>Нет ссылок для копирования</span>';
+            } else {
+                var countText = count ? (" (" + count + ")") : "";
+                pill.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
+            }
+            container.appendChild(pill);
+            
+            setTimeout(function() {
+                if (pill && pill.parentNode) {
+                    pill.parentNode.removeChild(pill);
+                }
+            }, 1400);
         }
-        if (!textToCopy) {
-            var domLinks = [];
-            var doc = (w && w.document) ? w.document : document;
-            doc.querySelectorAll(".results-table a[href*='tiktok.com'], .table-card a[href*='tiktok.com']").forEach(function(a) {
-                var href = a.getAttribute("href");
-                if (href && domLinks.indexOf(href) === -1) domLinks.push(href);
-            });
-            if (domLinks.length > 0) textToCopy = domLinks.join("\\n");
-        }
 
-        var count = btn.getAttribute("data-count") || "";
-        var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
-        btn.innerText = "Скопировано ✓";
-        showCopyToast(count, btn);
-        setTimeout(function() {
-            btn.innerText = origText;
-        }, 1500);
-
-        copyToClipboardRobust(textToCopy);
-    };
-
-    if (!w.__bsCopyListenerAttached) {
-        w.__bsCopyListenerAttached = true;
-        w.document.addEventListener("click", function(e) {
-            var btn = e.target.closest("#copy_links_btn_main");
+        window.bsHandleCopyClick = function(btn) {
             if (!btn) return;
-            e.preventDefault();
-            if (w.bsHandleCopyClick) {
-                w.bsHandleCopyClick(btn);
-            }
-        });
-    }
+            if (btn.__lastCopyTime && (Date.now() - btn.__lastCopyTime < 50)) return;
+            btn.__lastCopyTime = Date.now();
 
-    // Capture-phase listener for top tile cards: instant in-place switch without full-screen spinner
-    if (!w.__bsTileListenerAttached) {
-        w.__bsTileListenerAttached = true;
+            var textToCopy = btn.getAttribute("data-plain-text") || "";
+            if (!textToCopy) {
+                try {
+                    var raw = btn.getAttribute("data-links");
+                    var links = JSON.parse(raw || "[]");
+                    textToCopy = Array.isArray(links) ? links.join(String.fromCharCode(10)) : String(raw || "");
+                } catch(e) {
+                    textToCopy = "";
+                }
+            }
+            if (!textToCopy) {
+                var domLinks = [];
+                document.querySelectorAll(".results-table a[href*='tiktok.com'], .table-card a[href*='tiktok.com']").forEach(function(a) {
+                    var href = a.getAttribute("href");
+                    if (href && domLinks.indexOf(href) === -1) domLinks.push(href);
+                });
+                if (domLinks.length > 0) textToCopy = domLinks.join(String.fromCharCode(10));
+            }
+
+            var count = btn.getAttribute("data-count") || "";
+            if (!textToCopy || count === "0") {
+                showCopyToast("0", btn);
+                return;
+            }
+
+            copyTextEverywhere(textToCopy);
+
+            var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
+            btn.innerText = "Скопировано ✓";
+            showCopyToast(count, btn);
+            
+            clearTimeout(btn.__resetTimeout);
+            btn.__resetTimeout = setTimeout(function() {
+                if (btn) btn.innerText = origText;
+            }, 1400);
+        };
+
+        // Capture-phase click listener on document in top window realm
+        document.addEventListener("click", function(e) {
+            var btn = e.target.closest("#copy_links_btn_main");
+            if (btn) {
+                e.preventDefault();
+                e.stopPropagation();
+                window.bsHandleCopyClick(btn);
+            }
+        }, true);
+
+        // Capture-phase listener for top tile cards: instant in-place switch without full-screen spinner
         var tileToLabelKeyword = {
             "keyser": "caser",
             "upgrade": "upgrader",
@@ -1708,7 +1693,7 @@ components.html("""
             "all_promo": "все рекламные"
         };
 
-        w.document.addEventListener("click", function(e) {
+        document.addEventListener("click", function(e) {
             var card = e.target.closest(".tile-card");
             if (!card) return;
             
@@ -1722,7 +1707,7 @@ components.html("""
 
             var keyword = tileToLabelKeyword[tile];
             if (keyword) {
-                var pillBtns = w.document.querySelectorAll('.st-key-promo_variant_pills button');
+                var pillBtns = document.querySelectorAll('.st-key-promo_variant_pills button');
                 for (var k = 0; k < pillBtns.length; k++) {
                     var bText = (pillBtns[k].innerText || "").toLowerCase();
                     if (bText.indexOf(keyword) !== -1) {
@@ -1734,7 +1719,8 @@ components.html("""
                 }
             }
         }, true);
-    }
+    `;
+    w.document.head.appendChild(s);
 })();
 </script>
 """, height=0, width=0)
@@ -2708,7 +2694,7 @@ results_bar_html = f"""
     </div>
     <div class="results-header-actions">
         <div class="copy-btn-anchor-wrapper">
-            <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-plain-text="{urls_escaped_plain}" data-count="{active_m}" onclick="var w=(window.parent&&window.parent.document)?window.parent:window;if(w.bsHandleCopyClick){{w.bsHandleCopyClick(this);}}">Скопировать ссылки ({active_m})</button>
+            <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-plain-text="{urls_escaped_plain}" data-count="{active_m}">Скопировать ссылки ({active_m})</button>
             <div id="adwhisper_copy_toast_anchor" class="copy-button-toast-anchor"></div>
         </div>
         <a href="{txt_data_uri}" download="adwhisper_{sel_tile}.txt" class="action-btn-outline">Скачать .txt</a>
