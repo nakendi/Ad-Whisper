@@ -659,6 +659,70 @@ st.markdown("""
         color: #121314;
         font-weight: 600;
     }
+
+    /* Hidden Tile Triggers (used for instant in-place switching without reload / spinner) */
+    div[data-testid="stElementContainer"]:has(button[title="hidden_tile_trigger"]),
+    div[data-testid="stElementContainer"]:has(button[aria-label="hidden_tile_trigger"]),
+    div[data-testid="stColumn"]:has(button[title="hidden_tile_trigger"]),
+    div[data-testid="stHorizontalBlock"]:has(button[title="hidden_tile_trigger"]) {
+        display: none !important;
+        height: 0 !important;
+        max-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        position: absolute !important;
+        pointer-events: none !important;
+    }
+
+    /* Toast Notification System */
+    .copy-toast-container {
+        position: fixed;
+        top: 32px;
+        right: 40px;
+        z-index: 99999999;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 8px;
+        pointer-events: none;
+    }
+    .adwhisper-toast-pill {
+        background: #1A1C1E;
+        border: 1px solid #C8F169;
+        color: #ECEBE6;
+        font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        padding: 7px 16px;
+        border-radius: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), 0 0 14px rgba(200, 241, 105, 0.25);
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+        user-select: none;
+        animation: toastFloatFadeOut 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes toastFloatFadeOut {
+        0% {
+            opacity: 0;
+            transform: translateY(8px) scale(0.92);
+        }
+        15% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        60% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+        100% {
+            opacity: 0;
+            transform: translateY(-22px) scale(0.94);
+        }
+    }
+
     /* Promo Variant Pills (native instant switching without disconnect) */
     .st-key-promo_variant_pills {
         margin-bottom: 14px;
@@ -1498,6 +1562,40 @@ components.html("""
         });
     }
 
+    function showCopyToast(count) {
+        var container = w.document.getElementById("adwhisper_toast_container");
+        if (!container) {
+            container = w.document.createElement("div");
+            container.id = "adwhisper_toast_container";
+            container.className = "copy-toast-container";
+            w.document.body.appendChild(container);
+        }
+        
+        // If more than 3 toasts, smoothly fade out oldest immediately
+        var existing = container.querySelectorAll(".adwhisper-toast-pill");
+        if (existing.length >= 3) {
+            for (var j = 0; j < existing.length - 2; j++) {
+                var old = existing[j];
+                old.style.opacity = "0";
+                old.style.transform = "translateY(-24px) scale(0.9)";
+                old.style.transition = "all 0.25s ease-out";
+                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 250);
+            }
+        }
+        
+        var pill = w.document.createElement("div");
+        pill.className = "adwhisper-toast-pill";
+        var countText = count ? (" (" + count + ")") : "";
+        pill.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
+        container.appendChild(pill);
+        
+        setTimeout(function() {
+            if (pill && pill.parentNode) {
+                pill.parentNode.removeChild(pill);
+            }
+        }, 1500);
+    }
+
     if (!w.__bsCopyListenerAttached) {
         w.__bsCopyListenerAttached = true;
         w.document.addEventListener("click", function(e) {
@@ -1508,13 +1606,14 @@ components.html("""
                 var raw = btn.getAttribute("data-links");
                 var links = JSON.parse(raw || "[]");
                 var textToCopy = Array.isArray(links) ? links.join("\\n") : String(raw || "");
+                var count = btn.getAttribute("data-count") || "";
                 copyTextFallback(textToCopy).then(function() {
-                    var count = btn.getAttribute("data-count") || "";
                     var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
                     btn.innerText = "Скопировано ✓";
+                    showCopyToast(count);
                     setTimeout(function() {
                         btn.innerText = origText;
-                    }, 1800);
+                    }, 1600);
                 }).catch(function(err) {
                     console.error("Clipboard copy error:", err);
                 });
@@ -1523,6 +1622,55 @@ components.html("""
             }
         });
     }
+
+    // Capture-phase listener for top tile cards: instant in-place switch without full-screen spinner
+    if (!w.__bsTileListenerAttached) {
+        w.__bsTileListenerAttached = true;
+        w.document.addEventListener("click", function(e) {
+            var card = e.target.closest(".tile-card");
+            if (!card) return;
+            
+            var tile = card.getAttribute("data-tile");
+            if (!tile) {
+                var href = card.getAttribute("href") || "";
+                var m = href.match(/[?&]tile=([a-z_0-9]+)/);
+                if (m) tile = m[1];
+            }
+            if (!tile) return;
+
+            // Search for hidden button trigger
+            var btns = w.document.querySelectorAll("button");
+            var targetBtn = null;
+            for (var i = 0; i < btns.length; i++) {
+                var txt = (btns[i].innerText || "").trim();
+                if (txt === "switch_" + tile) {
+                    targetBtn = btns[i];
+                    break;
+                }
+            }
+            
+            if (targetBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                targetBtn.click();
+            }
+        }, true);
+    }
+
+    // Ensure hidden trigger buttons stay completely hidden in DOM
+    function hideTriggers() {
+        var btns = w.document.querySelectorAll("button");
+        btns.forEach(function(b) {
+            if (b.innerText && b.innerText.indexOf("switch_") !== -1) {
+                var p = b.closest('[data-testid="stElementContainer"]') || b;
+                p.style.setProperty("display", "none", "important");
+                var col = b.closest('[data-testid="stColumn"]');
+                if (col) col.style.setProperty("display", "none", "important");
+            }
+        });
+    }
+    hideTriggers();
+    setInterval(hideTriggers, 500);
 })();
 </script>
 """, height=0, width=0)
@@ -2362,16 +2510,65 @@ if cnt_errors > 0:
 else:
     bottom_stat_text = f"Отсеяно до {format_space_num(min_views_val)}: {format_space_num(cnt_filtered_views)} из {format_space_num(total_collected_cnt)}"
 
+# Hidden trigger buttons for seamless in-place switching of top tiles without page reload / spinner
+c_sw1, c_sw2, c_sw3, c_sw4, c_sw5, c_sw6 = st.columns(6)
+with c_sw1:
+    if st.button("switch_keyser", key="btn_sw_keyser", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "keyser"
+        st.session_state.promo_variant_pills = "keyser"
+        st.query_params["tile"] = "keyser"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+with c_sw2:
+    if st.button("switch_upgrade", key="btn_sw_upgrade", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "upgrade"
+        st.session_state.promo_variant_pills = "upgrade"
+        st.query_params["tile"] = "upgrade"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+with c_sw3:
+    if st.button("switch_dotagrade", key="btn_sw_dotagrade", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "dotagrade"
+        st.session_state.promo_variant_pills = "dotagrade"
+        st.query_params["tile"] = "dotagrade"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+with c_sw4:
+    if st.button("switch_all_promo", key="btn_sw_all_promo", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "all_promo"
+        st.session_state.promo_variant_pills = "all_promo"
+        st.query_params["tile"] = "all_promo"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+with c_sw5:
+    if st.button("switch_no_promo", key="btn_sw_no_promo", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "no_promo"
+        st.query_params["tile"] = "no_promo"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+with c_sw6:
+    if st.button("switch_views", key="btn_sw_views", help="hidden_tile_trigger"):
+        st.session_state.selected_tile = "views"
+        st.query_params["tile"] = "views"
+        if curr_target_user:
+            st.query_params["account"] = curr_target_user
+        st.rerun()
+
 # Render Tiles Grid (Pure CSS Grid, exactly 1 row of 6 tiles, no empty columns)
 acc_qs = f"&account={urllib.parse.quote(curr_target_user)}" if curr_target_user else ""
 tiles_grid_html = (
     f'<div class="filter-tiles-grid {grid_expand_cls}">'
-    f'<a href="?tile=keyser{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "keyser" else ""}"><div class="tile-label">Caser</div><div class="tile-num">{cnt_keyser}</div></a>'
-    f'<a href="?tile=upgrade{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
-    f'<a href="?tile=dotagrade{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "dotagrade" else ""}"><div class="tile-label">DotaGrade</div><div class="tile-num">{cnt_dotagrade}</div></a>'
-    f'<a href="?tile=all_promo{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "all_promo" else ""}"><div class="tile-label">Всего с рекламой</div><div class="tile-num">{cnt_all_promo}</div><div class="tile-subtext">{promo_pct}% от {total_tested} проверенных</div></a>'
-    f'<a href="?tile=no_promo{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "no_promo" else ""}"><div class="tile-label">Без рекламы</div><div class="tile-num">{cnt_no_promo}</div><div class="tile-subtext">Обычный контент</div></a>'
-    f'<a href="?tile=views{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "views" else ""}">'
+    f'<a href="?tile=keyser{acc_qs}" data-tile="keyser" target="_self" class="tile-card {"active" if sel_tile == "keyser" else ""}"><div class="tile-label">Caser</div><div class="tile-num">{cnt_keyser}</div></a>'
+    f'<a href="?tile=upgrade{acc_qs}" data-tile="upgrade" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
+    f'<a href="?tile=dotagrade{acc_qs}" data-tile="dotagrade" target="_self" class="tile-card {"active" if sel_tile == "dotagrade" else ""}"><div class="tile-label">DotaGrade</div><div class="tile-num">{cnt_dotagrade}</div></a>'
+    f'<a href="?tile=all_promo{acc_qs}" data-tile="all_promo" target="_self" class="tile-card {"active" if sel_tile == "all_promo" else ""}"><div class="tile-label">Всего с рекламой</div><div class="tile-num">{cnt_all_promo}</div><div class="tile-subtext">{promo_pct}% от {total_tested} проверенных</div></a>'
+    f'<a href="?tile=no_promo{acc_qs}" data-tile="no_promo" target="_self" class="tile-card {"active" if sel_tile == "no_promo" else ""}"><div class="tile-label">Без рекламы</div><div class="tile-num">{cnt_no_promo}</div><div class="tile-subtext">Обычный контент</div></a>'
+    f'<a href="?tile=views{acc_qs}" data-tile="views" target="_self" class="tile-card {"active" if sel_tile == "views" else ""}">'
     f'<div class="views-tile-body">'
     f'<div class="views-tile-top">'
     f'<div class="tile-label">Просмотры · {cur_cat_name}</div>'
