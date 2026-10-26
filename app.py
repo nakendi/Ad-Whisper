@@ -660,20 +660,6 @@ st.markdown("""
         font-weight: 600;
     }
 
-    /* Hidden Tile Triggers (used for instant in-place switching without reload / spinner) */
-    div[data-testid="stElementContainer"]:has(button[title="hidden_tile_trigger"]),
-    div[data-testid="stElementContainer"]:has(button[aria-label="hidden_tile_trigger"]),
-    div[data-testid="stColumn"]:has(button[title="hidden_tile_trigger"]),
-    div[data-testid="stHorizontalBlock"]:has(button[title="hidden_tile_trigger"]) {
-        display: none !important;
-        height: 0 !important;
-        max-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        position: absolute !important;
-        pointer-events: none !important;
-    }
 
     /* Toast Notification System */
     .copy-toast-container {
@@ -1607,15 +1593,14 @@ components.html("""
                 var links = JSON.parse(raw || "[]");
                 var textToCopy = Array.isArray(links) ? links.join("\\n") : String(raw || "");
                 var count = btn.getAttribute("data-count") || "";
-                copyTextFallback(textToCopy).then(function() {
-                    var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
-                    btn.innerText = "Скопировано ✓";
-                    showCopyToast(count);
-                    setTimeout(function() {
-                        btn.innerText = origText;
-                    }, 1600);
-                }).catch(function(err) {
-                    console.error("Clipboard copy error:", err);
+                var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
+                btn.innerText = "Скопировано ✓";
+                showCopyToast(count);
+                setTimeout(function() {
+                    btn.innerText = origText;
+                }, 1600);
+                copyTextFallback(textToCopy).catch(function(err) {
+                    console.warn("Clipboard copy warn:", err);
                 });
             } catch (ex) {
                 console.error("Copy handler parse error:", ex);
@@ -1626,6 +1611,13 @@ components.html("""
     // Capture-phase listener for top tile cards: instant in-place switch without full-screen spinner
     if (!w.__bsTileListenerAttached) {
         w.__bsTileListenerAttached = true;
+        var tileToLabelKeyword = {
+            "keyser": "caser",
+            "upgrade": "upgrader",
+            "dotagrade": "dotagrade",
+            "all_promo": "все рекламные"
+        };
+
         w.document.addEventListener("click", function(e) {
             var card = e.target.closest(".tile-card");
             if (!card) return;
@@ -1638,39 +1630,21 @@ components.html("""
             }
             if (!tile) return;
 
-            // Search for hidden button trigger
-            var btns = w.document.querySelectorAll("button");
-            var targetBtn = null;
-            for (var i = 0; i < btns.length; i++) {
-                var txt = (btns[i].innerText || "").trim();
-                if (txt === "switch_" + tile) {
-                    targetBtn = btns[i];
-                    break;
+            var keyword = tileToLabelKeyword[tile];
+            if (keyword) {
+                var pillBtns = w.document.querySelectorAll('.st-key-promo_variant_pills button');
+                for (var k = 0; k < pillBtns.length; k++) {
+                    var bText = (pillBtns[k].innerText || "").toLowerCase();
+                    if (bText.indexOf(keyword) !== -1) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        pillBtns[k].click();
+                        return;
+                    }
                 }
-            }
-            
-            if (targetBtn) {
-                e.preventDefault();
-                e.stopPropagation();
-                targetBtn.click();
             }
         }, true);
     }
-
-    // Ensure hidden trigger buttons stay completely hidden in DOM
-    function hideTriggers() {
-        var btns = w.document.querySelectorAll("button");
-        btns.forEach(function(b) {
-            if (b.innerText && b.innerText.indexOf("switch_") !== -1) {
-                var p = b.closest('[data-testid="stElementContainer"]') || b;
-                p.style.setProperty("display", "none", "important");
-                var col = b.closest('[data-testid="stColumn"]');
-                if (col) col.style.setProperty("display", "none", "important");
-            }
-        });
-    }
-    hideTriggers();
-    setInterval(hideTriggers, 500);
 })();
 </script>
 """, height=0, width=0)
@@ -2509,55 +2483,6 @@ if cnt_errors > 0:
     bottom_stat_text = f"Отсеяно: {format_space_num(cnt_filtered_views)} · Проверено: {format_space_num(total_tested)} · Ошибок: {format_space_num(cnt_errors)}"
 else:
     bottom_stat_text = f"Отсеяно до {format_space_num(min_views_val)}: {format_space_num(cnt_filtered_views)} из {format_space_num(total_collected_cnt)}"
-
-# Hidden trigger buttons for seamless in-place switching of top tiles without page reload / spinner
-c_sw1, c_sw2, c_sw3, c_sw4, c_sw5, c_sw6 = st.columns(6)
-with c_sw1:
-    if st.button("switch_keyser", key="btn_sw_keyser", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "keyser"
-        st.session_state.promo_variant_pills = "keyser"
-        st.query_params["tile"] = "keyser"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
-with c_sw2:
-    if st.button("switch_upgrade", key="btn_sw_upgrade", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "upgrade"
-        st.session_state.promo_variant_pills = "upgrade"
-        st.query_params["tile"] = "upgrade"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
-with c_sw3:
-    if st.button("switch_dotagrade", key="btn_sw_dotagrade", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "dotagrade"
-        st.session_state.promo_variant_pills = "dotagrade"
-        st.query_params["tile"] = "dotagrade"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
-with c_sw4:
-    if st.button("switch_all_promo", key="btn_sw_all_promo", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "all_promo"
-        st.session_state.promo_variant_pills = "all_promo"
-        st.query_params["tile"] = "all_promo"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
-with c_sw5:
-    if st.button("switch_no_promo", key="btn_sw_no_promo", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "no_promo"
-        st.query_params["tile"] = "no_promo"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
-with c_sw6:
-    if st.button("switch_views", key="btn_sw_views", help="hidden_tile_trigger"):
-        st.session_state.selected_tile = "views"
-        st.query_params["tile"] = "views"
-        if curr_target_user:
-            st.query_params["account"] = curr_target_user
-        st.rerun()
 
 # Render Tiles Grid (Pure CSS Grid, exactly 1 row of 6 tiles, no empty columns)
 acc_qs = f"&account={urllib.parse.quote(curr_target_user)}" if curr_target_user else ""
