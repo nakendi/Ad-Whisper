@@ -893,6 +893,14 @@ st.markdown("""
         color: #C8F169 !important;
         text-decoration: underline !important;
     }
+    .th-num, .td-num {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        color: #9A9C98;
+        text-align: center !important;
+        width: 48px;
+        white-space: nowrap;
+    }
     .td-id {
         font-family: 'JetBrains Mono', monospace;
         font-size: 13px;
@@ -1054,6 +1062,21 @@ st.markdown("""
     }
     summary.card-summary::-webkit-details-marker {
         display: none;
+    }
+    .card-num-badge {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 13px;
+        font-weight: 600;
+        color: #9A9C98;
+        background: #202225;
+        border: 1px solid #2A2D30;
+        border-radius: 6px;
+        padding: 2px 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1.2;
+        flex-shrink: 0;
     }
     .card-variant-title {
         font-size: 15px;
@@ -1547,6 +1570,8 @@ components.html("""
             var audio = document.getElementById(audioId);
             if (!audio) return;
 
+            if (audio.__playPending) return;
+
             if (window.__currentAudio === audio && !audio.paused) {
                 audio.pause();
                 btnEl.classList.remove('is-playing');
@@ -1555,7 +1580,9 @@ components.html("""
             }
 
             if (window.__currentAudio && window.__currentAudio !== audio) {
-                window.__currentAudio.pause();
+                try {
+                    window.__currentAudio.pause();
+                } catch(e) {}
                 if (window.__currentBtn) {
                     window.__currentBtn.classList.remove('is-playing');
                     window.updatePlayIcon(window.__currentBtn, false);
@@ -1564,15 +1591,6 @@ components.html("""
 
             window.__currentAudio = audio;
             window.__currentBtn = btnEl;
-
-            audio.play().then(function(){
-                btnEl.classList.add('is-playing');
-                window.updatePlayIcon(btnEl, true);
-            }).catch(function(e){
-                console.error('Audio play error:', e);
-                btnEl.classList.remove('is-playing');
-                window.updatePlayIcon(btnEl, false);
-            });
 
             audio.onended = function(){
                 btnEl.classList.remove('is-playing');
@@ -1595,6 +1613,30 @@ components.html("""
                 btnEl.classList.remove('is-playing');
                 window.updatePlayIcon(btnEl, false);
             };
+
+            audio.onplay = function(){
+                btnEl.classList.add('is-playing');
+                window.updatePlayIcon(btnEl, true);
+            };
+
+            audio.__playPending = true;
+            var playPromise = audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(function(){
+                    audio.__playPending = false;
+                    btnEl.classList.add('is-playing');
+                    window.updatePlayIcon(btnEl, true);
+                }).catch(function(e){
+                    audio.__playPending = false;
+                    console.warn('Audio play error:', e);
+                    btnEl.classList.remove('is-playing');
+                    window.updatePlayIcon(btnEl, false);
+                });
+            } else {
+                audio.__playPending = false;
+                btnEl.classList.add('is-playing');
+                window.updatePlayIcon(btnEl, true);
+            }
         };
 
         function execCommandCopySync(text) {
@@ -1729,15 +1771,18 @@ components.html("""
             }, 1400);
         };
 
-        // Capture-phase click listener on document in top window realm
-        document.addEventListener("click", function(e) {
-            var btn = e.target.closest("#copy_links_btn_main");
-            if (btn) {
-                e.preventDefault();
-                e.stopPropagation();
-                window.bsHandleCopyClick(btn);
-            }
-        }, true);
+        // Capture-phase click listener for copy links button
+        if (!window.__copy_btn_bound) {
+            window.__copy_btn_bound = true;
+            document.addEventListener("click", function(e) {
+                var btn = e.target.closest("#copy_links_btn_main");
+                if (btn) {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    window.bsHandleCopyClick(btn);
+                }
+            }, true);
+        }
 
         // Capture-phase listener for top tile cards: instant in-place switch without full-screen spinner
         var tileToLabelKeyword = {
@@ -1747,87 +1792,97 @@ components.html("""
             "all_promo": "все рекламные"
         };
 
-        document.addEventListener("click", function(e) {
-            var card = e.target.closest(".tile-card");
-            if (!card) return;
-            
-            var tile = card.getAttribute("data-tile");
-            if (!tile) {
-                var href = card.getAttribute("href") || "";
-                var m = href.match(/[?&]tile=([a-z_0-9]+)/);
-                if (m) tile = m[1];
-            }
-            if (!tile) return;
+        if (!window.__tile_card_bound) {
+            window.__tile_card_bound = true;
+            document.addEventListener("click", function(e) {
+                var card = e.target.closest(".tile-card");
+                if (!card) return;
+                
+                var tile = card.getAttribute("data-tile");
+                if (!tile) {
+                    var href = card.getAttribute("href") || "";
+                    var m = href.match(/[?&]tile=([a-z_0-9]+)/);
+                    if (m) tile = m[1];
+                }
+                if (!tile) return;
 
-            var keyword = tileToLabelKeyword[tile];
-            if (keyword) {
-                var pillBtns = document.querySelectorAll('.st-key-promo_variant_pills button');
-                for (var k = 0; k < pillBtns.length; k++) {
-                    var bText = (pillBtns[k].innerText || "").toLowerCase();
-                    if (bText.indexOf(keyword) !== -1) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        pillBtns[k].click();
-                        return;
+                var keyword = tileToLabelKeyword[tile];
+                if (keyword) {
+                    var pillBtns = document.querySelectorAll('.st-key-promo_variant_pills button');
+                    for (var k = 0; k < pillBtns.length; k++) {
+                        var bText = (pillBtns[k].innerText || "").toLowerCase();
+                        if (bText.indexOf(keyword) !== -1) {
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+                            pillBtns[k].click();
+                            return;
+                        }
                     }
                 }
-            }
-        }, true);
+            }, true);
+        }
 
-        // Global capture listener for audio play/pause buttons
-        document.addEventListener("click", function(e) {
-            var btn = e.target.closest(".player-play-btn, .play-round-btn");
-            if (btn && !btn.disabled) {
-                var audioId = btn.getAttribute("data-audio-id");
-                if (audioId) {
+        // Global capture listener for audio player buttons & track seeking
+        if (!window.__player_bound) {
+            window.__player_bound = true;
+            document.addEventListener("click", function(e) {
+                var btn = e.target.closest(".player-play-btn");
+                if (btn && !btn.disabled) {
                     e.preventDefault();
-                    e.stopPropagation();
-                    var fillId = btn.getAttribute("data-fill-id");
-                    var timeId = btn.getAttribute("data-time-id");
-                    if (fillId && timeId) {
-                        window.bsInitCardTrack(audioId, fillId, timeId);
+                    e.stopImmediatePropagation();
+
+                    if (btn.__lastPlayClick && (Date.now() - btn.__lastPlayClick < 250)) return;
+                    btn.__lastPlayClick = Date.now();
+
+                    var audioId = btn.getAttribute("data-audio-id");
+                    if (audioId) {
+                        var fillId = btn.getAttribute("data-fill-id");
+                        var timeId = btn.getAttribute("data-time-id");
+                        if (fillId && timeId) {
+                            window.bsInitCardTrack(audioId, fillId, timeId);
+                        }
+                        window.bsToggleAudio(audioId, btn);
                     }
-                    window.bsToggleAudio(audioId, btn);
                     return;
                 }
-            }
 
-            // Global capture listener for clicking anywhere on the track bar to seek
-            var track = e.target.closest(".player-track");
-            if (track) {
-                var pill = track.closest(".player-pill");
-                if (pill) {
-                    var audio = pill.querySelector("audio");
-                    if (audio && audio.duration) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        var rect = track.getBoundingClientRect();
-                        var clickX = e.clientX - rect.left;
-                        var pct = Math.max(0, Math.min(1, clickX / rect.width));
-                        audio.currentTime = pct * audio.duration;
-                        var fill = pill.querySelector(".player-track-fill");
-                        if (fill) fill.style.width = (pct * 100) + '%';
-                        var pBtn = pill.querySelector(".player-play-btn");
-                        if (pBtn && audio.paused) {
-                            var pAudioId = pBtn.getAttribute("data-audio-id");
-                            var pFillId = pBtn.getAttribute("data-fill-id");
-                            var pTimeId = pBtn.getAttribute("data-time-id");
-                            if (pFillId && pTimeId) {
-                                window.bsInitCardTrack(pAudioId, pFillId, pTimeId);
+                // Global capture listener for clicking anywhere on the track bar to seek
+                var track = e.target.closest(".player-track");
+                if (track) {
+                    var pill = track.closest(".player-pill");
+                    if (pill) {
+                        var audio = pill.querySelector("audio");
+                        if (audio && audio.duration) {
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+                            var rect = track.getBoundingClientRect();
+                            var clickX = e.clientX - rect.left;
+                            var pct = Math.max(0, Math.min(1, clickX / rect.width));
+                            audio.currentTime = pct * audio.duration;
+                            var fill = pill.querySelector(".player-track-fill");
+                            if (fill) fill.style.width = (pct * 100) + '%';
+                            var pBtn = pill.querySelector(".player-play-btn");
+                            if (pBtn && audio.paused) {
+                                var pAudioId = pBtn.getAttribute("data-audio-id");
+                                var pFillId = pBtn.getAttribute("data-fill-id");
+                                var pTimeId = pBtn.getAttribute("data-time-id");
+                                if (pFillId && pTimeId) {
+                                    window.bsInitCardTrack(pAudioId, pFillId, pTimeId);
+                                }
+                                window.bsToggleAudio(pAudioId, pBtn);
                             }
-                            window.bsToggleAudio(pAudioId, pBtn);
+                            return;
                         }
-                        return;
                     }
                 }
-            }
 
-            // Prevent card toggle when clicking ID link
-            var idLink = e.target.closest(".card-meta-muted-link");
-            if (idLink) {
-                e.stopPropagation();
-            }
-        }, true);
+                // Prevent card toggle when clicking ID link
+                var idLink = e.target.closest(".card-meta-muted-link");
+                if (idLink) {
+                    e.stopPropagation();
+                }
+            }, true);
+        }
     `;
     w.document.head.appendChild(s);
 })();
@@ -2974,9 +3029,8 @@ if not active_rows:
         )
 else:
     table_rows_html = []
-    play_icon_svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>'
 
-    for r in active_rows:
+    for idx, r in enumerate(active_rows, start=1):
         v_id = str(r.get("video_id") or "")
         auth_name = (r.get("author") or curr_target_user or "video").lstrip("@")
         v_url = r.get("video_url") or f"https://www.tiktok.com/@{auth_name}/video/{v_id}"
@@ -2993,23 +3047,17 @@ else:
         escaped_url = html.escape(v_url, quote=True)
         id_html = f'<a href="{escaped_url}" target="_blank" rel="noopener noreferrer" class="td-id-link">{html.escape(v_id)}</a>'
 
-        audio_url = get_audio_url(v_id)
-        if audio_url:
-            audio_cell = f'<audio id="tbl_aud_{v_id}" src="{audio_url}" preload="none"></audio><button class="play-round-btn" data-audio-id="tbl_aud_{v_id}" aria-label="Воспроизвести">{play_icon_svg}</button>'
-        else:
-            audio_cell = f'<button class="play-round-btn" disabled style="opacity: 0.3; cursor: not-allowed;" aria-label="Аудио недоступно">{play_icon_svg}</button>'
-
         trans_cell = f'<details class="tbl-trans-details"><summary class="tbl-trans-summary" title="Нажмите, чтобы развернуть полную транскрипцию">{snip_html}</summary><div class="tbl-trans-full">{clean_full_escaped}</div></details>'
 
         table_rows_html.append(
             f'<tr>'
+            f'<td class="td-num">#{idx}</td>'
             f'<td class="td-id">{id_html}</td>'
             f'<td class="td-views">{views_s}</td>'
             f'<td class="td-muted">{u_date}</td>'
             f'<td class="td-timecode">{tc_disp}</td>'
             f'<td class="td-conf">{conf_str}</td>'
             f'<td class="td-transcript">{trans_cell}</td>'
-            f'<td class="td-audio">{audio_cell}</td>'
             f'</tr>'
         )
 
@@ -3017,13 +3065,13 @@ else:
         '<div class="table-card">'
         '<table class="spec-table">'
         '<thead><tr>'
+        '<th style="text-align: center; width: 48px;" class="th-num">#</th>'
         '<th style="width: 170px;">ID видео</th>'
         '<th style="text-align: right; width: 90px;" class="th-views">Просмотры</th>'
         '<th style="width: 135px;">Опубликовано (UTC)</th>'
         '<th style="text-align: center; width: 105px;" class="th-timecode">Таймкод</th>'
         '<th style="text-align: center; width: 110px;" class="th-conf" title="Степень совпадения с эталонной фразой (fuzzy-match, 0–100%)">Уверенность</th>'
         '<th>Транскрипция</th>'
-        '<th style="text-align: center; width: 60px;">Аудио</th>'
         '</tr></thead>'
         '<tbody>'
         + ''.join(table_rows_html)
@@ -3035,7 +3083,7 @@ else:
 chevron_svg = '<svg class="chevron-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>'
 
 cards_list_html = []
-for idx, r in enumerate(active_rows):
+for idx, r in enumerate(active_rows, start=1):
     v_id = str(r.get("video_id") or "")
     views_s = format_space_num(r.get("views", 0))
     u_date = str(r.get("upload_date") or "")
@@ -3073,7 +3121,7 @@ for idx, r in enumerate(active_rows):
     fill_id = f"cfill_{v_id}"
     time_id = f"ctime_{v_id}"
 
-    open_attr = "open" if idx == 0 else ""
+    open_attr = "open" if idx == 1 else ""
 
     if audio_url:
         player_html = (
@@ -3103,6 +3151,7 @@ for idx, r in enumerate(active_rows):
         f'<details class="card-details" {open_attr}>'
         f'<summary class="card-summary">'
         f'{chevron_svg}'
+        f'<span class="card-num-badge">#{idx}</span>'
         f'<span class="card-variant-title">{var_num_label}</span>'
         f'<span class="card-pill-tag">{cat_pill_label}</span>'
         f'<span class="card-views-txt">{views_s} просмотров</span>'
