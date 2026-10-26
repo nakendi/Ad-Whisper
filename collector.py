@@ -637,7 +637,7 @@ class TikTokCollector:
                 author=author,
                 title=title,
                 views=views,
-                upload_date=upload_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                upload_date=upload_date_formatted,
                 upload_timestamp=timestamp,
                 status="filtered_views"
             )
@@ -652,7 +652,7 @@ class TikTokCollector:
                 author=author,
                 title=title,
                 views=views,
-                upload_date=upload_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                upload_date=upload_date_formatted,
                 upload_timestamp=timestamp,
                 status="pending"
             )
@@ -663,7 +663,7 @@ class TikTokCollector:
             "author": author,
             "title": title,
             "views": views,
-            "upload_date": upload_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            "upload_date": upload_date_formatted,
             "upload_timestamp": timestamp,
             "duration": entry.get("duration") or 0
         }

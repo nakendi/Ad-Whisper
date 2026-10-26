@@ -42,5 +42,29 @@ class TestTikTokCollector(unittest.TestCase):
         self.assertEqual(cards[0]["author"], "twitch.clown")
         self.assertIn("#dota2", cards[0]["title"])
 
+    def test_process_entry_none_date_safety(self):
+        """Verify _process_entry does not fail with AttributeError when upload_dt is None."""
+        collector = TikTokCollector(db=None)
+        # Entry with non-snowflake id, no timestamp, views > 2000
+        entry = {
+            "id": "abc_non_snowflake",
+            "uploader": "testuser",
+            "view_count": 3000,
+            "title": "Sample title"
+        }
+        stats = {"filtered_date_count": 0, "filtered_views_count": 0}
+        # In-memory mock db or mock call
+        class MockDB:
+            def get_video(self, vid_id):
+                return None
+            def save_video(self, **kwargs):
+                pass
+
+        collector.db = MockDB()
+        res = collector._process_entry(entry, start_date=None, end_date=None, min_views=2000, stats=stats)
+        self.assertIsNotNone(res)
+        self.assertEqual(res["url"], "https://www.tiktok.com/@testuser/video/abc_non_snowflake")
+        self.assertEqual(res["upload_date"], "")
+
 if __name__ == "__main__":
     unittest.main()

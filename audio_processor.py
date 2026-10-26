@@ -92,9 +92,23 @@ class AudioProcessor:
 
         try:
             res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            
-            # Demucs places files in <output_dir>/htdemucs/<stem>/vocals.wav
             expected_demucs_vocals = self.demucs_output_dir / "htdemucs" / inp.stem / "vocals.wav"
+
+            # Fallback to CPU if CUDA execution failed (e.g. OutOfMemory)
+            if not expected_demucs_vocals.exists() and self.device == "cuda":
+                logger.warning("Demucs CUDA execution failed or ran out of memory (%s). Retrying on CPU...", res.stderr[:200])
+                cmd_cpu = [
+                    sys.executable,
+                    "-m", "demucs",
+                    "--two-stems", "vocals",
+                    "-n", "htdemucs",
+                    "-o", str(self.demucs_output_dir),
+                    "-d", "cpu",
+                    str(inp)
+                ]
+                subprocess.run(cmd_cpu, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            # Demucs places files in <output_dir>/htdemucs/<stem>/vocals.wav
             if expected_demucs_vocals.exists():
                 # Convert/copy to 16kHz mono wav at vocals_target
                 conv_cmd = [

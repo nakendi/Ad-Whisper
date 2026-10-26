@@ -7,6 +7,7 @@
 """
 
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -56,20 +57,23 @@ class ScannerEngine:
         )
 
         self._transcriber: Optional[SpeechTranscriber] = None
+        self._transcriber_lock = threading.Lock()
 
     @property
     def transcriber(self) -> SpeechTranscriber:
-        """Lazy loader for speech transcriber model."""
+        """Lazy loader for speech transcriber model (thread-safe)."""
         if self._transcriber is None:
-            w_cfg = self.config.get("whisper", {})
-            self._transcriber = SpeechTranscriber(
-                model_name=w_cfg.get("model_name", "large-v3"),
-                device=w_cfg.get("device", "cuda"),
-                compute_type=w_cfg.get("compute_type", "float16"),
-                initial_prompt=w_cfg.get("initial_prompt"),
-                vad_filter=w_cfg.get("vad_filter", True),
-                vad_parameters=w_cfg.get("vad_parameters")
-            )
+            with self._transcriber_lock:
+                if self._transcriber is None:
+                    w_cfg = self.config.get("whisper", {})
+                    self._transcriber = SpeechTranscriber(
+                        model_name=w_cfg.get("model_name", "large-v3"),
+                        device=w_cfg.get("device", "cuda"),
+                        compute_type=w_cfg.get("compute_type", "float16"),
+                        initial_prompt=w_cfg.get("initial_prompt"),
+                        vad_filter=w_cfg.get("vad_filter", True),
+                        vad_parameters=w_cfg.get("vad_parameters")
+                    )
         return self._transcriber
 
     def run_scan(self,
@@ -252,6 +256,12 @@ class ScannerEngine:
                 is_doubtful=False,
                 verification_notes=str(e)
             )
+        finally:
+            if clean_audio and clean_audio != audio_path:
+                try:
+                    Path(clean_audio).unlink(missing_ok=True)
+                except Exception as del_err:
+                    logger.debug("Failed to remove intermediate clean_audio: %s", del_err)
 
         full_text = trans_result["full_text"]
         segments = trans_result["segments"]
@@ -273,7 +283,8 @@ class ScannerEngine:
         if match_res.is_doubtful:
             logger.info("Match for video %s is doubtful (conf=%.2f). Running Demucs separation...",
                         vid_id, match_res.confidence)
-            vocals_path = self.audio_processor.separate_vocals_with_demucs(audio_path, video_id=vid_id)
+            with self.transcriber._lock:
+                vocals_path = self.audio_processor.separate_vocals_with_demucs(audio_path, video_id=vid_id)
             if vocals_path:
                 try:
                     demucs_trans = self.transcriber.transcribe(vocals_path)
@@ -294,6 +305,8 @@ class ScannerEngine:
                     if demucs_match.confidence > match_res.confidence:
                         match_res = demucs_match
                         match_res.verification_notes += " [Подтверждено через Demucs]"
+                        full_text = demucs_trans["full_text"]
+                        segments = demucs_trans["segments"]
                     elif demucs_match.confidence < 0.35 and match_res.confidence < 0.55:
                         # Demucs proved original was background music illusion
                         match_res.found = False
@@ -326,7 +339,7 @@ class ScannerEngine:
         if self.config.get("auto_cleanup_temp_audio", True):
             if not match_res.found and not match_res.is_doubtful:
                 try:
-                    for f_to_del in [audio_path, clean_audio]:
+                    for f_to_del in [audio_path]:
                         if f_to_del:
                             p_del = Path(f_to_del)
                             if p_del.exists():
@@ -368,7 +381,15 @@ class ScannerEngine:
         clean_audio = self.audio_processor.preprocess_audio(str(p))
 
         # Whisper Transcription
-        trans_result = self.transcriber.transcribe(clean_audio)
+        try:
+            trans_result = self.transcriber.transcribe(clean_audio)
+        finally:
+            if clean_audio and clean_audio != str(p):
+                try:
+                    Path(clean_audio).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
         full_text = trans_result["full_text"]
         segments = trans_result["segments"]
 
@@ -387,7 +408,8 @@ class ScannerEngine:
         # Demucs if doubtful
         if match_res.is_doubtful:
             logger.info("Match for %s is doubtful (conf=%.2f). Running Demucs...", video_id, match_res.confidence)
-            vocals_path = self.audio_processor.separate_vocals_with_demucs(str(p), video_id=video_id)
+            with self.transcriber._lock:
+                vocals_path = self.audio_processor.separate_vocals_with_demucs(str(p), video_id=video_id)
             if vocals_path:
                 try:
                     demucs_trans = self.transcriber.transcribe(vocals_path)
@@ -406,6 +428,8 @@ class ScannerEngine:
                     if demucs_match.confidence > match_res.confidence:
                         match_res = demucs_match
                         match_res.verification_notes += " [Подтверждено через Demucs]"
+                        full_text = demucs_trans["full_text"]
+                        segments = demucs_trans["segments"]
                 except Exception as e:
                     logger.warning("Demucs re-transcription failed for %s: %s", video_id, e)
 
@@ -439,7 +463,8 @@ class ScannerEngine:
             if not success:
                 raise RuntimeError(err or "Failed to download audio for reprocessing.")
 
-        vocals_path = self.audio_processor.separate_vocals_with_demucs(audio_path, video_id=vid_id)
+        with self.transcriber._lock:
+            vocals_path = self.audio_processor.separate_vocals_with_demucs(audio_path, video_id=vid_id)
         if not vocals_path:
             raise RuntimeError("Demucs failed to separate vocals.")
 
