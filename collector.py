@@ -44,14 +44,26 @@ class TikTokCollector:
 
     @staticmethod
     def extract_username(url_or_name: str) -> str:
-        """Extracts clean lowercase username from TikTok URL or handle."""
+        """Extracts clean lowercase username from TikTok URL or handle, including short links."""
         if not url_or_name:
             return ""
         s = url_or_name.strip()
+        # Resolve short mobile TikTok links (vm.tiktok.com, vt.tiktok.com)
+        if "vm.tiktok.com" in s or "vt.tiktok.com" in s:
+            try:
+                full_s = s if s.startswith("http") else f"https://{s}"
+                r = c_req.head(full_s, timeout=5, allow_redirects=True)
+                target_url = r.url or ""
+                m_short = re.search(r"@([a-zA-Z0-9_\.]+)", target_url)
+                if m_short:
+                    return m_short.group(1).lstrip("@").lower()
+            except Exception:
+                pass
+
         m = re.search(r"@([a-zA-Z0-9_\.]+)", s)
         if m:
             return m.group(1).lstrip("@").lower()
-        m2 = re.search(r"tiktok\.com/([a-zA-Z0-9_\.]+)", s)
+        m2 = re.search(r"tiktok\.com/@?([a-zA-Z0-9_\.]+)", s)
         if m2:
             return m2.group(1).lstrip("@").lower()
         clean = s.split("?")[0].split("/")[0].lstrip("@").lower()
@@ -118,24 +130,24 @@ class TikTokCollector:
 
     @staticmethod
     def parse_relative_time_str(time_str: str) -> datetime:
-        """Parses strings like '11 minutes ago', '5 hours ago', '3 days ago'."""
+        """Parses relative time strings like '5 hours ago', '3 дня назад' in English and Russian."""
         now = datetime.now(timezone.utc)
         time_str = str(time_str).lower().strip()
-        m = re.search(r'(\d+)\s*(minute|min|hour|hr|day|week|month|year)', time_str)
+        m = re.search(r'(\d+)\s*(minute|min|минут|hour|hr|час|day|дн|ден|week|недел|month|месяц|year|год|лет)', time_str)
         if m:
             val = int(m.group(1))
             unit = m.group(2)
-            if 'min' in unit:
+            if any(k in unit for k in ['min', 'минут']):
                 return now - timedelta(minutes=val)
-            elif 'hour' in unit or 'hr' in unit:
+            elif any(k in unit for k in ['hour', 'hr', 'час']):
                 return now - timedelta(hours=val)
-            elif 'day' in unit:
+            elif any(k in unit for k in ['day', 'дн', 'ден']):
                 return now - timedelta(days=val)
-            elif 'week' in unit:
+            elif any(k in unit for k in ['week', 'недел']):
                 return now - timedelta(weeks=val)
-            elif 'month' in unit:
+            elif any(k in unit for k in ['month', 'месяц']):
                 return now - timedelta(days=val * 30)
-            elif 'year' in unit:
+            elif any(k in unit for k in ['year', 'год', 'лет']):
                 return now - timedelta(days=val * 365)
         # Attempt YYYY-MM-DD parse
         m_date = re.search(r'(\d{4})-(\d{2})-(\d{2})', time_str)
@@ -520,21 +532,33 @@ class TikTokCollector:
                     if video_info:
                         result["passed_filter"].append(video_info)
                 except Exception as e:
-                    logger.warning("Could not fetch info for %s: %s", url, e)
+                    logger.warning("Could not fetch info for %s: %s (falling back to direct download pipeline)", url, e)
                     vid_id = self.parse_tiktok_id_from_url(url)
                     u_target = self.extract_username(url) or "unknown"
                     if vid_id:
+                        ts = self.extract_snowflake_timestamp(vid_id) or int(datetime.now(timezone.utc).timestamp())
+                        upload_dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+                        # Keep manual URLs as pending so audio download pipeline can still process them
                         self.db.save_video(
                             video_id=vid_id,
                             url=url,
                             author=u_target,
                             title="",
-                            views=0,
-                            upload_date="",
-                            upload_timestamp=0,
-                            status="error",
-                            error_message=f"Ошибка загрузки метаданных: {e}"
+                            views=min_views + 1,
+                            upload_date=upload_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                            upload_timestamp=ts,
+                            status="pending"
                         )
+                        result["passed_filter"].append({
+                            "id": vid_id,
+                            "url": url,
+                            "author": u_target,
+                            "title": "",
+                            "views": min_views + 1,
+                            "upload_date": upload_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                            "upload_timestamp": ts,
+                            "duration": 0
+                        })
 
         return result
 

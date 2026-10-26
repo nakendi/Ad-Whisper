@@ -6,11 +6,13 @@ and determines exact duration.
 
 import json
 import logging
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import yt_dlp
+from curl_cffi import requests as c_req
 
 from database import Database
 
@@ -95,7 +97,40 @@ class AudioDownloader:
                 return False, None, 0.0, err
 
         except Exception as e:
+            logger.warning("Direct yt-dlp download failed for %s (%s): %s. Trying fallback stream...", video_id, url, e)
+            if self.download_via_fallback_stream(video_id, target_path):
+                duration = self.probe_duration(target_path)
+                self.db.update_video_status(video_id, status="downloaded", duration=duration,
+                                           local_audio_path=str(target_path))
+                return True, str(target_path), duration, None
+
             err_msg = f"Ошибка скачивания аудио: {e}"
-            logger.error("Download failed for video %s (%s): %s", video_id, url, e)
+            logger.error("All download methods failed for video %s (%s): %s", video_id, url, e)
             self.db.update_video_status(video_id, status="poor_quality", error_message=err_msg)
             return False, None, 0.0, err_msg
+
+    def download_via_fallback_stream(self, video_id: str, target_path: Path) -> bool:
+        """Fallback method: extracts direct CDN media stream from public mirror and downloads via ffmpeg."""
+        try:
+            logger.info("Attempting fallback direct CDN stream download for %s...", video_id)
+            mirror_url = f"https://urlebird.com/video/{video_id}/"
+            r = c_req.get(mirror_url, impersonate="chrome124", timeout=12)
+            if r.status_code == 200:
+                vids = re.findall(r'<video[^>]*src="([^"]+)"', r.text)
+                if vids:
+                    direct_url = vids[0]
+                    cmd = [
+                        "ffmpeg", "-y",
+                        "-i", direct_url,
+                        "-vn",
+                        "-ar", "16000",
+                        "-ac", "1",
+                        str(target_path)
+                    ]
+                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45)
+                    if res.returncode == 0 and target_path.exists() and target_path.stat().st_size > 1024:
+                        logger.info("Fallback CDN stream download succeeded for %s", video_id)
+                        return True
+        except Exception as e:
+            logger.warning("Fallback CDN download failed for %s: %s", video_id, e)
+        return False

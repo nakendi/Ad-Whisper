@@ -2743,9 +2743,14 @@ if not active_rows:
             unsafe_allow_html=True
         )
     else:
+        extra_hint = ""
+        cnt_filtered = len(filtered_views_rows)
+        if cnt_filtered > 0:
+            extra_hint = f"<div style='font-size: 13px; margin-top: 8px; color: #7A7C80;'>Собрано публикаций аккаунта: <b>{total_collected_cnt}</b> (из них <b>{cnt_filtered}</b> отсеяно по порогу просмотров ≤ {format_space_num(min_views_val)}). Вы можете просмотреть их, перейдя на плитку <b>«Отсеяно по просмотрам»</b> или <b>«Все публикации»</b> вверху.</div>"
         st.markdown(
             f'<div class="table-card" style="padding: 24px; color: #9A9C98;">'
-            f'В выбранной категории нет записей для аккаунта <b>@{html.escape(curr_target_user)}</b> за указанный период.'
+            f'<div style="font-size: 15px; color: #ECEBE6;">В выбранной категории «{active_cfg["title"]}» нет публикаций для <b>@{html.escape(curr_target_user)}</b>.</div>'
+            f'{extra_hint}'
             f'</div>',
             unsafe_allow_html=True
         )
