@@ -661,55 +661,70 @@ st.markdown("""
     }
 
 
-    /* Center Toast Notification System in Marked Zone (above table, below pills) */
-    .table-toast-zone {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        transform: translateY(-50%);
-        display: flex;
-        flex-direction: column;
+    /* Anchored Copy Toast Notification directly on Copy Button */
+    .copy-btn-anchor-wrapper {
+        position: relative;
+        display: inline-flex;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
+    }
+    .copy-button-toast-anchor {
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column-reverse;
+        align-items: center;
+        gap: 6px;
         pointer-events: none;
-        z-index: 9999999;
+        z-index: 99999999;
+        white-space: nowrap;
     }
     .adwhisper-toast-pill {
+        position: relative;
         background: #1A1C1E;
         border: 1px solid #C8F169;
         color: #ECEBE6;
         font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 600;
-        padding: 7px 18px;
-        border-radius: 20px;
-        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.85), 0 0 16px rgba(200, 241, 105, 0.35);
+        padding: 6px 14px;
+        border-radius: 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.85), 0 0 14px rgba(200, 241, 105, 0.35);
         display: inline-flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         white-space: nowrap;
         user-select: none;
         pointer-events: none;
-        animation: toastCenterFloatFadeOut 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        animation: toastAnchorFloatFade 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
-    @keyframes toastCenterFloatFadeOut {
+    .adwhisper-toast-pill::after {
+        content: '';
+        position: absolute;
+        bottom: -5px;
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 5px 5px 0 5px;
+        border-style: solid;
+        border-color: #1A1C1E transparent transparent transparent;
+    }
+    @keyframes toastAnchorFloatFade {
         0% {
             opacity: 0;
-            transform: translateY(12px) scale(0.92);
+            transform: translateY(6px) scale(0.88);
         }
         14% {
             opacity: 1;
             transform: translateY(0) scale(1);
         }
-        65% {
+        60% {
             opacity: 1;
             transform: translateY(0) scale(1);
         }
         100% {
             opacity: 0;
-            transform: translateY(-26px) scale(0.90);
+            transform: translateY(-22px) scale(0.92);
         }
     }
 
@@ -1195,6 +1210,8 @@ st.markdown("""
         justify-content: center;
         text-decoration: none;
         white-space: nowrap;
+        min-width: 195px;
+        box-sizing: border-box;
     }
     .action-btn-copy:hover {
         background: #FFFFFF;
@@ -1588,56 +1605,49 @@ components.html("""
         }
     }
 
-    function showCopyToast(count) {
+    function showCopyToast(count, btnEl) {
         var doc = (w && w.document) ? w.document : document;
-        var container = doc.getElementById("adwhisper_table_toast_container");
-        if (!container) {
-            container = doc.getElementById("adwhisper_toast_container");
-        }
-        if (!container) {
-            var wrapper = doc.createElement("div");
-            wrapper.style.position = "relative";
-            wrapper.style.width = "100%";
-            wrapper.style.height = "0";
-            wrapper.style.margin = "0";
-            wrapper.style.padding = "0";
-            
-            container = doc.createElement("div");
-            container.id = "adwhisper_table_toast_container";
-            container.className = "table-toast-zone";
-            wrapper.appendChild(container);
-            
-            var target = doc.querySelector(".st-key-promo_variant_pills") || doc.querySelector(".results-header-bar");
-            if (target && target.parentNode) {
-                target.parentNode.insertBefore(wrapper, target.nextSibling);
-            } else {
-                doc.body.appendChild(wrapper);
+        var btn = btnEl || doc.getElementById("copy_links_btn_main");
+        
+        // Find anchor container attached directly to the copy button
+        var container = doc.getElementById("adwhisper_copy_toast_anchor");
+        if (!container && btn) {
+            var parent = btn.closest(".copy-btn-anchor-wrapper") || btn.parentNode;
+            container = parent ? parent.querySelector(".copy-button-toast-anchor") : null;
+            if (!container && parent) {
+                container = doc.createElement("div");
+                container.id = "adwhisper_copy_toast_anchor";
+                container.className = "copy-button-toast-anchor";
+                parent.appendChild(container);
             }
         }
+        if (!container) {
+            container = doc.body;
+        }
         
-        // Accelerated exit for oldest toast if 2 or more exist
+        // If 2 or more toasts are already present, immediately accelerate older toasts upward
         var existing = container.querySelectorAll(".adwhisper-toast-pill");
         if (existing.length >= 2) {
             for (var j = 0; j < existing.length - 1; j++) {
                 var old = existing[j];
-                old.style.transition = "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
+                old.style.transition = "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
                 old.style.opacity = "0";
-                old.style.transform = "translateY(-30px) scale(0.85)";
-                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 220);
+                old.style.transform = "translateY(-30px) scale(0.82)";
+                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 200);
             }
         }
         
         var pill = doc.createElement("div");
         pill.className = "adwhisper-toast-pill";
         var countText = count ? (" (" + count + ")") : "";
-        pill.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
+        pill.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
         container.appendChild(pill);
         
         setTimeout(function() {
             if (pill && pill.parentNode) {
                 pill.parentNode.removeChild(pill);
             }
-        }, 1500);
+        }, 1400);
     }
 
     w.bsHandleCopyClick = function(btn) {
@@ -1668,10 +1678,10 @@ components.html("""
         var count = btn.getAttribute("data-count") || "";
         var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
         btn.innerText = "Скопировано ✓";
-        showCopyToast(count);
+        showCopyToast(count, btn);
         setTimeout(function() {
             btn.innerText = origText;
-        }, 1600);
+        }, 1500);
 
         copyToClipboardRobust(textToCopy);
     };
@@ -2697,7 +2707,10 @@ results_bar_html = f"""
         <h1 class="results-title-h1">{active_cfg["h1"]}</h1>
     </div>
     <div class="results-header-actions">
-        <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-plain-text="{urls_escaped_plain}" data-count="{active_m}" onclick="var w=(window.parent&&window.parent.document)?window.parent:window;if(w.bsHandleCopyClick){{w.bsHandleCopyClick(this);}}">Скопировать ссылки ({active_m})</button>
+        <div class="copy-btn-anchor-wrapper">
+            <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-plain-text="{urls_escaped_plain}" data-count="{active_m}" onclick="var w=(window.parent&&window.parent.document)?window.parent:window;if(w.bsHandleCopyClick){{w.bsHandleCopyClick(this);}}">Скопировать ссылки ({active_m})</button>
+            <div id="adwhisper_copy_toast_anchor" class="copy-button-toast-anchor"></div>
+        </div>
         <a href="{txt_data_uri}" download="adwhisper_{sel_tile}.txt" class="action-btn-outline">Скачать .txt</a>
     </div>
 </div>
@@ -2730,13 +2743,7 @@ if sel_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
         label_visibility="collapsed"
     )
 
-# Center Toast Container in Marked Zone (between pills and table)
-st.markdown(
-    '<div style="position: relative; width: 100%; height: 0; margin: 0; padding: 0;">'
-    '<div id="adwhisper_table_toast_container" class="table-toast-zone"></div>'
-    '</div>',
-    unsafe_allow_html=True
-)
+
 
 # 10. RESULTS TABLE
 if not active_rows:
