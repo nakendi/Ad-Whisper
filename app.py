@@ -658,6 +658,51 @@ st.markdown("""
         color: #121314;
         font-weight: 600;
     }
+    /* Promo Variant Pills (native instant switching without disconnect) */
+    .st-key-promo_variant_pills {
+        margin-bottom: 14px;
+    }
+    .st-key-promo_variant_pills div[data-testid="stButtonGroup"] {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    .st-key-promo_variant_pills button[data-variant="pills"] {
+        background: #1A1C1E !important;
+        border: 1px solid #2A2D30 !important;
+        border-radius: 999px !important;
+        padding: 6px 14px !important;
+        font-size: 12px !important;
+        font-weight: 500 !important;
+        color: #9A9C98 !important;
+        transition: all 0.15s ease !important;
+        min-height: 0 !important;
+        height: auto !important;
+        box-shadow: none !important;
+    }
+    .st-key-promo_variant_pills button[data-variant="pills"]:hover {
+        color: #ECEBE6 !important;
+        border-color: #3A3E42 !important;
+        background: #232528 !important;
+    }
+    .st-key-promo_variant_pills button[data-variant="pills"][data-selected="true"],
+    .st-key-promo_variant_pills button[data-variant="pills"][aria-checked="true"] {
+        background: #C8F169 !important;
+        border-color: #C8F169 !important;
+        color: #121314 !important;
+        font-weight: 600 !important;
+    }
+    .st-key-promo_variant_pills button[data-variant="pills"] p {
+        font-size: 12px !important;
+        margin: 0 !important;
+        line-height: 1.4 !important;
+        color: inherit !important;
+    }
+    .st-key-promo_variant_pills button[data-variant="pills"][data-selected="true"] p,
+    .st-key-promo_variant_pills button[data-variant="pills"][aria-checked="true"] p {
+        color: #121314 !important;
+        font-weight: 600 !important;
+    }
     .results-pill-filter {
         background: #1A1C1E;
         border: 1px solid #2A2D30;
@@ -2278,8 +2323,8 @@ else:
 # Render Tiles Grid (Pure CSS Grid, exactly 1 row of 6 tiles, no empty columns)
 tiles_grid_html = (
     f'<div class="filter-tiles-grid {grid_expand_cls}">'
-    f'<a href="?tile=upgrade" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
     f'<a href="?tile=keyser" target="_self" class="tile-card {"active" if sel_tile == "keyser" else ""}"><div class="tile-label">Caser</div><div class="tile-num">{cnt_keyser}</div></a>'
+    f'<a href="?tile=upgrade" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
     f'<a href="?tile=dotagrade" target="_self" class="tile-card {"active" if sel_tile == "dotagrade" else ""}"><div class="tile-label">DotaGrade</div><div class="tile-num">{cnt_dotagrade}</div></a>'
     f'<a href="?tile=all_promo" target="_self" class="tile-card {"active" if sel_tile == "all_promo" else ""}"><div class="tile-label">Всего с рекламой</div><div class="tile-num">{cnt_all_promo}</div><div class="tile-subtext">{promo_pct}% от {total_tested} проверенных</div></a>'
     f'<a href="?tile=no_promo" target="_self" class="tile-card {"active" if sel_tile == "no_promo" else ""}"><div class="tile-label">Без рекламы</div><div class="tile-num">{cnt_no_promo}</div><div class="tile-subtext">Обычный контент</div></a>'
@@ -2387,22 +2432,6 @@ if cnt_doubtful > 0:
     active_cls = "active" if sel_tile == "doubtful" else ""
     doubtful_pill_html = f'<span style="color: #2A2D30; margin: 0 4px;">|</span><a href="?tile=doubtful" target="_self" class="results-pill-filter {active_cls}">Сомнительные ({cnt_doubtful})</a>'
 
-# Sub-variants tabs for "Всего с рекламой" or promo variants
-sub_tabs_html = ""
-if sel_tile in ("all_promo", "keyser", "upgrade", "dotagrade"):
-    t_all_cls = "active" if sel_tile == "all_promo" else ""
-    t_k_cls = "active" if sel_tile == "keyser" else ""
-    t_u_cls = "active" if sel_tile == "upgrade" else ""
-    t_d_cls = "active" if sel_tile == "dotagrade" else ""
-    sub_tabs_html = f"""
-    <div class="promo-sub-tabs">
-        <a href="?tile=all_promo" target="_self" class="promo-sub-tab {t_all_cls}" title="Все найденные рекламные интеграции">Все рекламные ({cnt_all_promo})</a>
-        <a href="?tile=keyser" target="_self" class="promo-sub-tab {t_k_cls}" title="Вариант №1: «А улучшить своё яйцо ты можешь в баттлпассе Caser»">Вариант 1: Caser ({cnt_keyser})</a>
-        <a href="?tile=upgrade" target="_self" class="promo-sub-tab {t_u_cls}" title="Вариант №2: «А улучшить свои скины ты можешь на Upgrader»">Вариант 2: Upgrader ({cnt_upgrade})</a>
-        <a href="?tile=dotagrade" target="_self" class="promo-sub-tab {t_d_cls}" title="Вариант №3: «А улучшить рарки на подарки ты можешь на DotaGrade»">Вариант 3: DotaGrade ({cnt_dotagrade})</a>
-    </div>
-    """
-
 escaped_tooltip = html.escape(active_cfg['tooltip'], quote=True)
 
 results_bar_html = f"""
@@ -2420,9 +2449,30 @@ results_bar_html = f"""
         <a href="{txt_data_uri}" download="adwhisper_{sel_tile}.txt" class="action-btn-outline">Скачать .txt</a>
     </div>
 </div>
-{sub_tabs_html}
 """
 st.markdown(clean_html(results_bar_html), unsafe_allow_html=True)
+
+# Sub-variants pills for promo variants (Instant in-place switching without page reload / disconnect)
+if sel_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
+    sub_options = ["keyser", "upgrade", "dotagrade", "all_promo"]
+    sub_labels = {
+        "keyser": f"Вариант 1: Caser ({cnt_keyser})",
+        "upgrade": f"Вариант 2: Upgrader ({cnt_upgrade})",
+        "dotagrade": f"Вариант 3: DotaGrade ({cnt_dotagrade})",
+        "all_promo": f"Все рекламные ({cnt_all_promo})"
+    }
+    chosen_sub = st.pills(
+        "Выбор рекламного варианта",
+        options=sub_options,
+        format_func=lambda x: sub_labels[x],
+        default=sel_tile if sel_tile in sub_options else "keyser",
+        key="promo_variant_pills",
+        label_visibility="collapsed"
+    )
+    if chosen_sub and chosen_sub != sel_tile:
+        st.session_state.selected_tile = chosen_sub
+        st.query_params["tile"] = chosen_sub
+        st.rerun()
 
 # 10. RESULTS TABLE
 if not active_rows:
