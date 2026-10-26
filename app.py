@@ -27,6 +27,7 @@ from exporter import ReportExporter
 from matcher import PhraseMatcher
 from scanner_engine import ScannerEngine
 from collector import TikTokCollector
+import updater
 
 # 1. Icon & Page Configuration
 icon_file_path = Path(__file__).resolve().parent / "app_icon.png"
@@ -203,6 +204,30 @@ st.markdown("""
         font-weight: 500;
         color: #CFCEC8;
         line-height: 1;
+    }
+    .header-update-btn {
+        text-decoration: none !important;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .header-update-btn:hover {
+        border-color: #C8F169 !important;
+        color: #ECEBE6 !important;
+        transform: translateY(-1px);
+    }
+    .header-update-btn.has-update {
+        border-color: #C8F169 !important;
+        background: rgba(200, 241, 105, 0.12) !important;
+        color: #C8F169 !important;
+        font-weight: 600 !important;
+        animation: pulse-update-badge 2.4s infinite ease-in-out;
+    }
+    @keyframes pulse-update-badge {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(200, 241, 105, 0.4); }
+        50% { box-shadow: 0 0 0 4px rgba(200, 241, 105, 0); }
     }
 
     /* SECTION 2: PARAMETERS PANEL */
@@ -2015,11 +2040,119 @@ def confirm_wipe_database_dialog(v_count: int, t_count: int):
             st.rerun()
 
 # 4. SECTION 1: HEADER
+@st.cache_data(ttl=180, show_spinner=False)
+def get_cached_update_info() -> Dict[str, Any]:
+    try:
+        return updater.check_for_updates()
+    except Exception as e:
+        return {"has_update": False, "local_sha": updater.get_local_version(), "remote_sha": "", "message": "", "error": str(e)}
+
+@st.dialog("Обновление AdWhisper")
+def show_update_dialog():
+    with st.spinner("Проверка обновлений на GitHub..."):
+        upd_res = updater.check_for_updates()
+    has_update = upd_res.get("has_update", False)
+    local_sha = upd_res.get("local_sha") or updater.get_local_version()
+    remote_sha = upd_res.get("remote_sha") or local_sha
+    msg = upd_res.get("message") or "Улучшения и исправления"
+    date_str = upd_res.get("date") or ""
+    err_str = upd_res.get("error")
+
+    if has_update:
+        st.markdown(
+            f"""
+            <div style="font-size: 15px; font-weight: 600; color: #C8F169; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Доступна новая версия AdWhisper!
+            </div>
+            <div style="background: #121314; border: 1px solid #2A2D30; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: #7A7C80;">Установленная версия:</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #9A9C98;">{local_sha}</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px;">
+                    <span style="color: #7A7C80;">Свежая версия на GitHub:</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #C8F169; font-weight: 600;">{remote_sha} ({date_str})</span>
+                </div>
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #222528; color: #ECEBE6; font-size: 12px; line-height: 1.4;">
+                    <span style="color: #7A7C80;">Что нового:</span> <b>{html.escape(msg)}</b>
+                </div>
+            </div>
+            <div style="font-size: 12px; color: #9A9C98; margin-bottom: 18px; line-height: 1.4;">
+                Обновление загрузит только свежие скрипты программы (~300 КБ). Ваша база данных, кэш и настройки останутся в сохранности.
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        col_c1, col_c2 = st.columns([1, 1.2])
+        with col_c1:
+            if st.button("Отмена", key="btn_cancel_upd", use_container_width=True):
+                if "update" in st.query_params:
+                    del st.query_params["update"]
+                st.rerun()
+        with col_c2:
+            if st.button("🚀 Обновить сейчас", key="btn_do_apply_upd", type="primary", use_container_width=True):
+                with st.spinner("Загрузка обновления из GitHub..."):
+                    ok, res_msg = updater.apply_update(remote_sha)
+                if ok:
+                    st.toast(res_msg)
+                    get_cached_update_info.clear()
+                    if "update" in st.query_params:
+                        del st.query_params["update"]
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(res_msg)
+    else:
+        status_txt = f"Ошибка связи: {err_str}" if err_str else "У вас установлена последняя версия"
+        status_color = "#D03B3B" if err_str else "#C8F169"
+        st.markdown(
+            f"""
+            <div style="font-size: 15px; font-weight: 600; color: #ECEBE6; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="{status_color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                {status_txt}
+            </div>
+            <div style="background: #121314; border: 1px solid #2A2D30; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; font-size: 13px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: #7A7C80;">Текущий коммит:</span>
+                    <span style="font-family: 'JetBrains Mono', monospace; color: #C8F169;">{local_sha}</span>
+                </div>
+                <div style="font-size: 12px; color: #9A9C98; margin-top: 6px;">
+                    {html.escape(msg) if msg else 'Все компоненты актуальны.'}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+        col_u1, col_u2 = st.columns([1, 1])
+        with col_u1:
+            if st.button("Закрыть", key="btn_close_upd", use_container_width=True):
+                if "update" in st.query_params:
+                    del st.query_params["update"]
+                st.rerun()
+        with col_u2:
+            if st.button("Проверить снова", key="btn_recheck_upd", use_container_width=True):
+                get_cached_update_info.clear()
+                st.rerun()
+
+if "update" in st.query_params:
+    show_update_dialog()
+
 active_whisper_model = load_config().get("whisper", {}).get("model_name", "large-v3")
 if icon_b64:
     header_icon_html = f'<img src="data:image/png;base64,{icon_b64}" width="36" height="36" style="border-radius: 9px; margin-right: 12px; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,0.4);">'
 else:
     header_icon_html = """<svg width="32" height="32" viewBox="0 0 24 24" fill="#FFFFFF"><path d="M19.59 6.69a4.83 4.83 0 0 1-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 0 1-5.2 1.74 2.89 2.89 0 0 1 2.31-4.64c.298-.002.595.042.88.13V9.4a6.33 6.33 0 0 0-1-.08A6.34 6.34 0 0 0 3 15.66a6.34 6.34 0 0 0 10.82 4.47 6.27 6.27 0 0 0 1.95-4.47V8.75a8.16 8.16 0 0 0 4.82 1.56V6.86a4.85 4.85 0 0 1-1-.17Z"/></svg>"""
+
+update_info = get_cached_update_info()
+has_upd = update_info.get("has_update", False)
+upd_cls = "header-update-btn has-update" if has_upd else "header-update-btn"
+upd_label = "⚡ Update" if has_upd else "Update"
+upd_tooltip = f"Доступно обновление ({update_info.get('remote_sha')})! Нажмите для просмотра" if has_upd else "Проверить обновления приложения"
+
+cur_qp = dict(st.query_params)
+cur_qp["update"] = "1"
+upd_href = f"?{urllib.parse.urlencode(cur_qp)}"
 
 st.markdown(clean_html(f"""
 <div class="banner-header">
@@ -2031,6 +2164,7 @@ st.markdown(clean_html(f"""
         </div>
     </div>
     <div class="header-pills">
+        <a href="{upd_href}" target="_self" class="header-pill {upd_cls}" title="{upd_tooltip}">{upd_label}</a>
         <span class="header-pill">Whisper {active_whisper_model}</span>
         <span class="header-pill">Demucs</span>
         <span class="header-pill">yt-dlp</span>

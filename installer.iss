@@ -52,6 +52,7 @@ Source: "audio_processor.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "exporter.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "database.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "config.py"; DestDir: "{app}"; Flags: ignoreversion
+Source: "updater.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "run.bat"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
