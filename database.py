@@ -295,7 +295,7 @@ class Database:
             params = []
             if author and author.strip():
                 clean_auth = author.strip().lstrip("@").lower()
-                query += " AND LOWER(v.author) = ?"
+                query += " AND LOWER(REPLACE(COALESCE(v.author, ''), '@', '')) = ?"
                 params.append(clean_auth)
 
             if variant_filter:

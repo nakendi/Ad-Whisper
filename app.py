@@ -1766,17 +1766,40 @@ if "start_date_picker" not in st.session_state:
 if "end_date_picker" not in st.session_state:
     st.session_state.end_date_picker = today
 
+# Restore or initialize main_account_input
+if "main_account_input" not in st.session_state:
+    if "account" in st.query_params and str(st.query_params["account"]).strip():
+        raw_acc = str(st.query_params["account"]).strip()
+        st.session_state.main_account_input = f"https://www.tiktok.com/@{raw_acc.lstrip('@')}" if not raw_acc.startswith("http") else raw_acc
+    elif not st.session_state.get("account_reset", False):
+        latest_scans = db.get_latest_scans(1)
+        if latest_scans and latest_scans[0].get("account") and latest_scans[0]["account"] not in ("unknown", "custom_urls", "local"):
+            raw_acc = str(latest_scans[0]["account"]).strip()
+            st.session_state.main_account_input = f"https://www.tiktok.com/@{raw_acc.lstrip('@')}" if not raw_acc.startswith("http") else raw_acc
+            st.query_params["account"] = raw_acc.lstrip("@")
+        else:
+            st.session_state.main_account_input = ""
+    else:
+        st.session_state.main_account_input = ""
+
 with st.container(border=True):
     # ROW 1: Profile URL + 5 Chip Buttons
     col_acc, col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns([2.5, 0.7, 0.7, 0.7, 0.8, 0.7], vertical_alignment="bottom")
     with col_acc:
         account_input = st.text_input(
             "Профиль или ссылка TikTok",
-            value=st.session_state.get("main_account_input", ""),
             placeholder="https://www.tiktok.com/@username",
             key="main_account_input",
             label_visibility="visible"
         )
+        if account_input and account_input.strip():
+            st.session_state.account_reset = False
+            u = TikTokCollector.extract_username(account_input)
+            if u and st.query_params.get("account") != u:
+                st.query_params["account"] = u
+        elif not account_input or not account_input.strip():
+            if "account" in st.query_params:
+                del st.query_params["account"]
     with col_c1:
         if st.button("7 дней", key="chip_7d", use_container_width=True):
             st.session_state.is_all_time = False
@@ -1799,13 +1822,17 @@ with st.container(border=True):
         if st.button("Всё время", key="chip_all", use_container_width=True):
             st.session_state.is_all_time = True
             st.rerun()
+    def on_chip_reset_click():
+        st.session_state.is_all_time = False
+        st.session_state.start_date_picker = today - timedelta(days=6)
+        st.session_state.end_date_picker = today
+        st.session_state.main_account_input = ""
+        st.session_state.account_reset = True
+        if "account" in st.query_params:
+            del st.query_params["account"]
+
     with col_c5:
-        if st.button("Сброс", key="chip_reset", use_container_width=True):
-            st.session_state.is_all_time = False
-            st.session_state.start_date_picker = today - timedelta(days=6)
-            st.session_state.end_date_picker = today
-            st.session_state.main_account_input = ""
-            st.rerun()
+        st.button("Сброс", key="chip_reset", on_click=on_chip_reset_click, use_container_width=True)
 
     # ROW 2: Dates, Min Views, VRAM, Threads Slider, Run Scan Button
     col_d1, col_d2, col_mv, col_vr, col_th, col_btn = st.columns([1.1, 1.1, 0.9, 0.9, 1.4, 1.5], vertical_alignment="bottom")
@@ -2290,8 +2317,11 @@ promo_pct = round((cnt_all_promo / max(1, total_tested)) * 100) if total_tested 
 # 8. SECTION 3: FILTER TILES (Grid)
 if "tile" in st.query_params:
     st.session_state.selected_tile = str(st.query_params["tile"]).strip()
+    if st.session_state.selected_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
+        st.session_state.promo_variant_pills = st.session_state.selected_tile
 elif "selected_tile" not in st.session_state:
     st.session_state.selected_tile = "keyser"  # Matches mockup default
+    st.session_state.promo_variant_pills = "keyser"
 
 sel_tile = st.session_state.selected_tile
 
@@ -2333,14 +2363,15 @@ else:
     bottom_stat_text = f"Отсеяно до {format_space_num(min_views_val)}: {format_space_num(cnt_filtered_views)} из {format_space_num(total_collected_cnt)}"
 
 # Render Tiles Grid (Pure CSS Grid, exactly 1 row of 6 tiles, no empty columns)
+acc_qs = f"&account={urllib.parse.quote(curr_target_user)}" if curr_target_user else ""
 tiles_grid_html = (
     f'<div class="filter-tiles-grid {grid_expand_cls}">'
-    f'<a href="?tile=keyser" target="_self" class="tile-card {"active" if sel_tile == "keyser" else ""}"><div class="tile-label">Caser</div><div class="tile-num">{cnt_keyser}</div></a>'
-    f'<a href="?tile=upgrade" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
-    f'<a href="?tile=dotagrade" target="_self" class="tile-card {"active" if sel_tile == "dotagrade" else ""}"><div class="tile-label">DotaGrade</div><div class="tile-num">{cnt_dotagrade}</div></a>'
-    f'<a href="?tile=all_promo" target="_self" class="tile-card {"active" if sel_tile == "all_promo" else ""}"><div class="tile-label">Всего с рекламой</div><div class="tile-num">{cnt_all_promo}</div><div class="tile-subtext">{promo_pct}% от {total_tested} проверенных</div></a>'
-    f'<a href="?tile=no_promo" target="_self" class="tile-card {"active" if sel_tile == "no_promo" else ""}"><div class="tile-label">Без рекламы</div><div class="tile-num">{cnt_no_promo}</div><div class="tile-subtext">Обычный контент</div></a>'
-    f'<a href="?tile=views" target="_self" class="tile-card {"active" if sel_tile == "views" else ""}">'
+    f'<a href="?tile=keyser{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "keyser" else ""}"><div class="tile-label">Caser</div><div class="tile-num">{cnt_keyser}</div></a>'
+    f'<a href="?tile=upgrade{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "upgrade" else ""}"><div class="tile-label">Upgrader</div><div class="tile-num">{cnt_upgrade}</div></a>'
+    f'<a href="?tile=dotagrade{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "dotagrade" else ""}"><div class="tile-label">DotaGrade</div><div class="tile-num">{cnt_dotagrade}</div></a>'
+    f'<a href="?tile=all_promo{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "all_promo" else ""}"><div class="tile-label">Всего с рекламой</div><div class="tile-num">{cnt_all_promo}</div><div class="tile-subtext">{promo_pct}% от {total_tested} проверенных</div></a>'
+    f'<a href="?tile=no_promo{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "no_promo" else ""}"><div class="tile-label">Без рекламы</div><div class="tile-num">{cnt_no_promo}</div><div class="tile-subtext">Обычный контент</div></a>'
+    f'<a href="?tile=views{acc_qs}" target="_self" class="tile-card {"active" if sel_tile == "views" else ""}">'
     f'<div class="views-tile-body">'
     f'<div class="views-tile-top">'
     f'<div class="tile-label">Просмотры · {cur_cat_name}</div>'
@@ -2473,18 +2504,22 @@ if sel_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
         "dotagrade": f"Вариант 3: DotaGrade ({cnt_dotagrade})",
         "all_promo": f"Все рекламные ({cnt_all_promo})"
     }
+    def on_promo_pill_change():
+        new_sub = st.session_state.get("promo_variant_pills")
+        if new_sub:
+            st.session_state.selected_tile = new_sub
+            st.query_params["tile"] = new_sub
+            if curr_target_user:
+                st.query_params["account"] = curr_target_user
+
     chosen_sub = st.pills(
         "Выбор рекламного варианта",
         options=sub_options,
         format_func=lambda x: sub_labels[x],
-        default=sel_tile if sel_tile in sub_options else "keyser",
         key="promo_variant_pills",
+        on_change=on_promo_pill_change,
         label_visibility="collapsed"
     )
-    if chosen_sub and chosen_sub != sel_tile:
-        st.session_state.selected_tile = chosen_sub
-        st.query_params["tile"] = chosen_sub
-        st.rerun()
 
 # 10. RESULTS TABLE
 if not active_rows:
