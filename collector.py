@@ -152,7 +152,9 @@ class TikTokCollector:
         cards = []
         blocks = html_content.split('<div class="thumb')
         for b in blocks[1:]:
-            vid_m = re.search(r'href="https://urlebird\.com/video/(\d{18,20})', b)
+            vid_m = re.search(r'href="https://urlebird\.com/video/(?:[^\"]*?-)?(\d{18,20})/?["\']', b)
+            if not vid_m:
+                vid_m = re.search(r'/video/[^"]*?(\d{18,20})', b)
             if not vid_m:
                 continue
             vid_id = vid_m.group(1)
