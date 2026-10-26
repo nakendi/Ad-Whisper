@@ -661,17 +661,20 @@ st.markdown("""
     }
 
 
-    /* Toast Notification System */
-    .copy-toast-container {
-        position: fixed;
-        top: 32px;
-        right: 40px;
-        z-index: 99999999;
+    /* Center Toast Notification System in Marked Zone (above table, below pills) */
+    .table-toast-zone {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        transform: translateY(-50%);
         display: flex;
         flex-direction: column;
-        align-items: flex-end;
+        align-items: center;
+        justify-content: center;
         gap: 8px;
         pointer-events: none;
+        z-index: 9999999;
     }
     .adwhisper-toast-pill {
         background: #1A1C1E;
@@ -680,32 +683,33 @@ st.markdown("""
         font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
         font-size: 13px;
         font-weight: 600;
-        padding: 7px 16px;
+        padding: 7px 18px;
         border-radius: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.7), 0 0 14px rgba(200, 241, 105, 0.25);
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.85), 0 0 16px rgba(200, 241, 105, 0.35);
         display: inline-flex;
         align-items: center;
         gap: 8px;
         white-space: nowrap;
         user-select: none;
-        animation: toastFloatFadeOut 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        pointer-events: none;
+        animation: toastCenterFloatFadeOut 1.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
-    @keyframes toastFloatFadeOut {
+    @keyframes toastCenterFloatFadeOut {
         0% {
             opacity: 0;
-            transform: translateY(8px) scale(0.92);
+            transform: translateY(12px) scale(0.92);
         }
-        15% {
+        14% {
             opacity: 1;
             transform: translateY(0) scale(1);
         }
-        60% {
+        65% {
             opacity: 1;
             transform: translateY(0) scale(1);
         }
         100% {
             opacity: 0;
-            transform: translateY(-22px) scale(0.94);
+            transform: translateY(-26px) scale(0.90);
         }
     }
 
@@ -1521,55 +1525,109 @@ components.html("""
         };
     };
 
-    function copyTextFallback(text) {
-        if (w.navigator.clipboard && w.isSecureContext) {
-            return w.navigator.clipboard.writeText(text);
+    function copyToClipboardRobust(text) {
+        if (!text) {
+            console.warn("AdWhisper: no text to copy");
+            return Promise.resolve(false);
         }
-        return new Promise(function(resolve, reject) {
-            var doc = w.document;
-            var textArea = doc.createElement("textarea");
-            textArea.value = text;
-            textArea.style.position = "fixed";
-            textArea.style.top = "-9999px";
-            textArea.style.left = "-9999px";
-            textArea.setAttribute("readonly", "");
-            doc.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
+
+        function tryExecCommand(txt) {
+            var doc = (w && w.document) ? w.document : document;
+            var ta = doc.createElement("textarea");
+            ta.value = txt;
+            ta.style.position = "fixed";
+            ta.style.top = "0";
+            ta.style.left = "0";
+            ta.style.width = "2em";
+            ta.style.height = "2em";
+            ta.style.padding = "0";
+            ta.style.border = "none";
+            ta.style.outline = "none";
+            ta.style.boxShadow = "none";
+            ta.style.background = "transparent";
+            ta.style.opacity = "0.01";
+            ta.style.zIndex = "-99999";
+            ta.setAttribute("aria-hidden", "true");
+            doc.body.appendChild(ta);
+            
+            var success = false;
             try {
-                var successful = doc.execCommand("copy");
-                doc.body.removeChild(textArea);
-                if (successful) resolve();
-                else reject(new Error("execCommand failed"));
+                ta.focus({ preventScroll: true });
+                ta.select();
+                ta.setSelectionRange(0, ta.value.length);
+                success = doc.execCommand("copy");
             } catch (err) {
-                doc.body.removeChild(textArea);
-                reject(err);
+                console.warn("execCommand copy error:", err);
+                success = false;
+            } finally {
+                if (ta.parentNode) {
+                    doc.body.removeChild(ta);
+                }
             }
-        });
+            return success;
+        }
+
+        var navClip = null;
+        try {
+            if (w && w.navigator && w.navigator.clipboard && typeof w.navigator.clipboard.writeText === "function") {
+                navClip = w.navigator.clipboard;
+            }
+        } catch (e) {}
+
+        if (navClip) {
+            return navClip.writeText(text).then(function() {
+                return true;
+            }).catch(function(err) {
+                console.warn("navigator.clipboard.writeText failed, using execCommand fallback:", err);
+                var ok = tryExecCommand(text);
+                return ok;
+            });
+        } else {
+            var ok = tryExecCommand(text);
+            return Promise.resolve(ok);
+        }
     }
 
     function showCopyToast(count) {
-        var container = w.document.getElementById("adwhisper_toast_container");
+        var doc = (w && w.document) ? w.document : document;
+        var container = doc.getElementById("adwhisper_table_toast_container");
         if (!container) {
-            container = w.document.createElement("div");
-            container.id = "adwhisper_toast_container";
-            container.className = "copy-toast-container";
-            w.document.body.appendChild(container);
+            container = doc.getElementById("adwhisper_toast_container");
         }
-        
-        // If more than 3 toasts, smoothly fade out oldest immediately
-        var existing = container.querySelectorAll(".adwhisper-toast-pill");
-        if (existing.length >= 3) {
-            for (var j = 0; j < existing.length - 2; j++) {
-                var old = existing[j];
-                old.style.opacity = "0";
-                old.style.transform = "translateY(-24px) scale(0.9)";
-                old.style.transition = "all 0.25s ease-out";
-                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 250);
+        if (!container) {
+            var wrapper = doc.createElement("div");
+            wrapper.style.position = "relative";
+            wrapper.style.width = "100%";
+            wrapper.style.height = "0";
+            wrapper.style.margin = "0";
+            wrapper.style.padding = "0";
+            
+            container = doc.createElement("div");
+            container.id = "adwhisper_table_toast_container";
+            container.className = "table-toast-zone";
+            wrapper.appendChild(container);
+            
+            var target = doc.querySelector(".st-key-promo_variant_pills") || doc.querySelector(".results-header-bar");
+            if (target && target.parentNode) {
+                target.parentNode.insertBefore(wrapper, target.nextSibling);
+            } else {
+                doc.body.appendChild(wrapper);
             }
         }
         
-        var pill = w.document.createElement("div");
+        // Accelerated exit for oldest toast if 2 or more exist
+        var existing = container.querySelectorAll(".adwhisper-toast-pill");
+        if (existing.length >= 2) {
+            for (var j = 0; j < existing.length - 1; j++) {
+                var old = existing[j];
+                old.style.transition = "all 0.22s cubic-bezier(0.16, 1, 0.3, 1)";
+                old.style.opacity = "0";
+                old.style.transform = "translateY(-30px) scale(0.85)";
+                setTimeout((function(el) { return function() { if (el && el.parentNode) el.parentNode.removeChild(el); }; })(old), 220);
+            }
+        }
+        
+        var pill = doc.createElement("div");
         pill.className = "adwhisper-toast-pill";
         var countText = count ? (" (" + count + ")") : "";
         pill.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#C8F169" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Скопировано' + countText + '</span>';
@@ -1582,28 +1640,50 @@ components.html("""
         }, 1500);
     }
 
+    w.bsHandleCopyClick = function(btn) {
+        if (!btn) return;
+        if (btn.__lastCopyTime && (Date.now() - btn.__lastCopyTime < 100)) return;
+        btn.__lastCopyTime = Date.now();
+
+        var textToCopy = btn.getAttribute("data-plain-text") || "";
+        if (!textToCopy) {
+            try {
+                var raw = btn.getAttribute("data-links");
+                var links = JSON.parse(raw || "[]");
+                textToCopy = Array.isArray(links) ? links.join("\\n") : String(raw || "");
+            } catch(e) {
+                textToCopy = "";
+            }
+        }
+        if (!textToCopy) {
+            var domLinks = [];
+            var doc = (w && w.document) ? w.document : document;
+            doc.querySelectorAll(".results-table a[href*='tiktok.com'], .table-card a[href*='tiktok.com']").forEach(function(a) {
+                var href = a.getAttribute("href");
+                if (href && domLinks.indexOf(href) === -1) domLinks.push(href);
+            });
+            if (domLinks.length > 0) textToCopy = domLinks.join("\\n");
+        }
+
+        var count = btn.getAttribute("data-count") || "";
+        var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
+        btn.innerText = "Скопировано ✓";
+        showCopyToast(count);
+        setTimeout(function() {
+            btn.innerText = origText;
+        }, 1600);
+
+        copyToClipboardRobust(textToCopy);
+    };
+
     if (!w.__bsCopyListenerAttached) {
         w.__bsCopyListenerAttached = true;
         w.document.addEventListener("click", function(e) {
             var btn = e.target.closest("#copy_links_btn_main");
             if (!btn) return;
             e.preventDefault();
-            try {
-                var raw = btn.getAttribute("data-links");
-                var links = JSON.parse(raw || "[]");
-                var textToCopy = Array.isArray(links) ? links.join("\\n") : String(raw || "");
-                var count = btn.getAttribute("data-count") || "";
-                var origText = "Скопировать ссылки" + (count ? " (" + count + ")" : "");
-                btn.innerText = "Скопировано ✓";
-                showCopyToast(count);
-                setTimeout(function() {
-                    btn.innerText = origText;
-                }, 1600);
-                copyTextFallback(textToCopy).catch(function(err) {
-                    console.warn("Clipboard copy warn:", err);
-                });
-            } catch (ex) {
-                console.error("Copy handler parse error:", ex);
+            if (w.bsHandleCopyClick) {
+                w.bsHandleCopyClick(btn);
             }
         });
     }
@@ -2586,10 +2666,17 @@ if active_cfg["var_num"]:
 else:
     meta_prefix = f"{active_cfg['title']} · {active_m} видео"
 
-# Prepare URLs for copy and download
-cur_urls = [str(r.get("video_url")).strip() for r in active_rows if r.get("video_url")]
+# Prepare URLs for copy and download (with guaranteed fallback to constructed TikTok URL)
+cur_urls = []
+for r in active_rows:
+    v_id = str(r.get("video_id") or r.get("id") or "").strip()
+    auth_name = (r.get("author") or curr_target_user or "video").lstrip("@")
+    u = (r.get("video_url") or r.get("url") or (f"https://www.tiktok.com/@{auth_name}/video/{v_id}" if v_id else "")).strip()
+    if u:
+        cur_urls.append(u)
 urls_text = "\n".join(cur_urls)
 urls_escaped_json = html.escape(json.dumps(cur_urls, ensure_ascii=False), quote=True)
+urls_escaped_plain = html.escape(urls_text, quote=True)
 txt_data_uri = "data:text/plain;charset=utf-8," + urllib.parse.quote(urls_text)
 
 doubtful_pill_html = ""
@@ -2610,7 +2697,7 @@ results_bar_html = f"""
         <h1 class="results-title-h1">{active_cfg["h1"]}</h1>
     </div>
     <div class="results-header-actions">
-        <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-count="{active_m}">Скопировать ссылки ({active_m})</button>
+        <button type="button" id="copy_links_btn_main" class="action-btn-copy" data-links="{urls_escaped_json}" data-plain-text="{urls_escaped_plain}" data-count="{active_m}" onclick="var w=(window.parent&&window.parent.document)?window.parent:window;if(w.bsHandleCopyClick){{w.bsHandleCopyClick(this);}}">Скопировать ссылки ({active_m})</button>
         <a href="{txt_data_uri}" download="adwhisper_{sel_tile}.txt" class="action-btn-outline">Скачать .txt</a>
     </div>
 </div>
@@ -2642,6 +2729,14 @@ if sel_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
         on_change=on_promo_pill_change,
         label_visibility="collapsed"
     )
+
+# Center Toast Container in Marked Zone (between pills and table)
+st.markdown(
+    '<div style="position: relative; width: 100%; height: 0; margin: 0; padding: 0;">'
+    '<div id="adwhisper_table_toast_container" class="table-toast-zone"></div>'
+    '</div>',
+    unsafe_allow_html=True
+)
 
 # 10. RESULTS TABLE
 if not active_rows:
