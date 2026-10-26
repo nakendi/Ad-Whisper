@@ -1,0 +1,44 @@
+# AdWhisper Configuration
+tiktok:
+  account_url: "https://www.tiktok.com/@twitch.clown"
+  account_username: "twitch.clown"
+  min_views: 2000
+  request_timeout: 30
+
+whisper:
+  model_name: "large-v3"
+  device: "cuda"
+  compute_type: "float16"
+  language: "ru"
+  beam_size: 5
+  initial_prompt: "Реклама, скины, баттлпас Caser, кейсер, апгрейд, Upgrader, DotaGrade, dotagrade, яйцо, рарки на подарки."
+  vad_filter: true
+  vad_parameters:
+    min_speech_duration_ms: 250
+    speech_pad_ms: 400
+    threshold: 0.35
+
+demucs:
+  model_name: "large-v3"
+  device: "cuda"
+  shifts: 1
+  overlap: 0.25
+
+matching:
+  exact_threshold: 1.0
+  fuzzy_threshold: 0.72
+  semantic_threshold: 0.75
+  doubtful_lower_bound: 0.45
+  doubtful_upper_bound: 0.74
+
+storage:
+  db_path: "data/scanner.db"
+  temp_audio_dir: "data/temp_audio"
+  demucs_output_dir: "data/demucs_audio"
+  export_dir: "data/exports"
+  auto_cleanup_temp_audio: true
+  max_export_history: 15
+
+ui:
+  theme: "dark"
+  default_days_back: 30

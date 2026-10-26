@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Build & Distribution artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Logs and runtime caches
+*.log
+launcher.log
+streamlit.log
+
+# Temporary runtime data & cache
+data/temp_cookies.txt
+data/temp_audio/*
+!data/temp_audio/.gitkeep
+data/demucs_audio/*
+!data/demucs_audio/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+data/downloads/
+data/audio/
+data/cache/
+data/temp/
+data/*.png
+data/*.db
+!data/.gitkeep
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+scratch/
