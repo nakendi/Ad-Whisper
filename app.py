@@ -1477,7 +1477,8 @@ components.html("""
 <script>
 (function(){
     var w = (window.parent && window.parent.document) ? window.parent : window;
-    if (w.document.getElementById("adwhisper_injected_script")) return;
+    var prev = w.document.getElementById("adwhisper_injected_script");
+    if (prev && prev.parentNode) prev.parentNode.removeChild(prev);
 
     var s = w.document.createElement("script");
     s.id = "adwhisper_injected_script";
@@ -1485,42 +1486,12 @@ components.html("""
         window.__currentAudio = null;
         window.__currentBtn = null;
 
-        window.bsToggleAudio = function(audioId, btnEl) {
-            var audio = document.getElementById(audioId);
-            if (!audio) return;
-            if (window.__currentAudio === audio && !audio.paused) {
-                audio.pause();
-                btnEl.classList.remove('is-playing');
-                window.updatePlayIcon(btnEl, false);
-                return;
-            }
-            if (window.__currentAudio && window.__currentAudio !== audio) {
-                window.__currentAudio.pause();
-                if (window.__currentBtn) {
-                    window.__currentBtn.classList.remove('is-playing');
-                    window.updatePlayIcon(window.__currentBtn, false);
-                }
-            }
-            window.__currentAudio = audio;
-            window.__currentBtn = btnEl;
-            audio.play().then(function(){
-                btnEl.classList.add('is-playing');
-                window.updatePlayIcon(btnEl, true);
-            }).catch(function(e){ console.error('Audio play error:', e); });
-            audio.onended = function(){
-                btnEl.classList.remove('is-playing');
-                window.updatePlayIcon(btnEl, false);
-            };
-            audio.onpause = function(){
-                btnEl.classList.remove('is-playing');
-                window.updatePlayIcon(btnEl, false);
-            };
-        };
-
         window.updatePlayIcon = function(btnEl, isPlaying) {
             if (!btnEl) return;
-            var playSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
-            var pauseSvg = '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+            var isSmall = btnEl.classList.contains('play-round-btn');
+            var size = isSmall ? 14 : 16;
+            var playSvg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>';
+            var pauseSvg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
             btnEl.innerHTML = isPlaying ? pauseSvg : playSvg;
         };
 
@@ -1529,9 +1500,10 @@ components.html("""
             var fill = document.getElementById(fillId);
             var timeEl = document.getElementById(timeId);
             if (!audio) return;
-            audio.ontimeupdate = function(){
-                if (!audio.duration) return;
-                var pct = (audio.currentTime / audio.duration) * 100;
+
+            function updateTime() {
+                if (!audio.duration || isNaN(audio.duration)) return;
+                var pct = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
                 if (fill) fill.style.width = pct + '%';
                 if (timeEl) {
                     var curM = Math.floor(audio.currentTime / 60);
@@ -1540,6 +1512,63 @@ components.html("""
                     var durS = Math.floor(audio.duration % 60).toString().padStart(2, '0');
                     timeEl.textContent = curM + ':' + curS + ' / ' + durM + ':' + durS;
                 }
+            }
+
+            audio.ontimeupdate = updateTime;
+            audio.onloadedmetadata = updateTime;
+        };
+
+        window.bsToggleAudio = function(audioId, btnEl) {
+            var audio = document.getElementById(audioId);
+            if (!audio) return;
+
+            if (window.__currentAudio === audio && !audio.paused) {
+                audio.pause();
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+                return;
+            }
+
+            if (window.__currentAudio && window.__currentAudio !== audio) {
+                window.__currentAudio.pause();
+                if (window.__currentBtn) {
+                    window.__currentBtn.classList.remove('is-playing');
+                    window.updatePlayIcon(window.__currentBtn, false);
+                }
+            }
+
+            window.__currentAudio = audio;
+            window.__currentBtn = btnEl;
+
+            audio.play().then(function(){
+                btnEl.classList.add('is-playing');
+                window.updatePlayIcon(btnEl, true);
+            }).catch(function(e){
+                console.error('Audio play error:', e);
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+            });
+
+            audio.onended = function(){
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
+                var fillId = btnEl.getAttribute('data-fill-id');
+                var timeId = btnEl.getAttribute('data-time-id');
+                if (fillId) {
+                    var f = document.getElementById(fillId);
+                    if (f) f.style.width = '0%';
+                }
+                if (timeId && audio.duration) {
+                    var t = document.getElementById(timeId);
+                    var durM = Math.floor(audio.duration / 60);
+                    var durS = Math.floor(audio.duration % 60).toString().padStart(2, '0');
+                    if (t) t.textContent = '0:00 / ' + durM + ':' + durS;
+                }
+            };
+
+            audio.onpause = function(){
+                btnEl.classList.remove('is-playing');
+                window.updatePlayIcon(btnEl, false);
             };
         };
 
@@ -1717,6 +1746,61 @@ components.html("""
                         return;
                     }
                 }
+            }
+        }, true);
+
+        // Global capture listener for audio play/pause buttons
+        document.addEventListener("click", function(e) {
+            var btn = e.target.closest(".player-play-btn, .play-round-btn");
+            if (btn && !btn.disabled) {
+                var audioId = btn.getAttribute("data-audio-id");
+                if (audioId) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var fillId = btn.getAttribute("data-fill-id");
+                    var timeId = btn.getAttribute("data-time-id");
+                    if (fillId && timeId) {
+                        window.bsInitCardTrack(audioId, fillId, timeId);
+                    }
+                    window.bsToggleAudio(audioId, btn);
+                    return;
+                }
+            }
+
+            // Global capture listener for clicking anywhere on the track bar to seek
+            var track = e.target.closest(".player-track");
+            if (track) {
+                var pill = track.closest(".player-pill");
+                if (pill) {
+                    var audio = pill.querySelector("audio");
+                    if (audio && audio.duration) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var rect = track.getBoundingClientRect();
+                        var clickX = e.clientX - rect.left;
+                        var pct = Math.max(0, Math.min(1, clickX / rect.width));
+                        audio.currentTime = pct * audio.duration;
+                        var fill = pill.querySelector(".player-track-fill");
+                        if (fill) fill.style.width = (pct * 100) + '%';
+                        var pBtn = pill.querySelector(".player-play-btn");
+                        if (pBtn && audio.paused) {
+                            var pAudioId = pBtn.getAttribute("data-audio-id");
+                            var pFillId = pBtn.getAttribute("data-fill-id");
+                            var pTimeId = pBtn.getAttribute("data-time-id");
+                            if (pFillId && pTimeId) {
+                                window.bsInitCardTrack(pAudioId, pFillId, pTimeId);
+                            }
+                            window.bsToggleAudio(pAudioId, pBtn);
+                        }
+                        return;
+                    }
+                }
+            }
+
+            // Prevent card toggle when clicking ID link
+            var idLink = e.target.closest(".card-meta-muted-link");
+            if (idLink) {
+                e.stopPropagation();
             }
         }, true);
     `;
@@ -2777,7 +2861,7 @@ else:
 
         audio_url = get_audio_url(v_id)
         if audio_url:
-            audio_cell = f'<audio id="tbl_aud_{v_id}" src="{audio_url}" preload="none"></audio><button class="play-round-btn" onclick="bsToggleAudio(\'tbl_aud_{v_id}\', this)" aria-label="Воспроизвести">{play_icon_svg}</button>'
+            audio_cell = f'<audio id="tbl_aud_{v_id}" src="{audio_url}" preload="none"></audio><button class="play-round-btn" data-audio-id="tbl_aud_{v_id}" aria-label="Воспроизвести">{play_icon_svg}</button>'
         else:
             audio_cell = f'<button class="play-round-btn" disabled style="opacity: 0.3; cursor: not-allowed;" aria-label="Аудио недоступно">{play_icon_svg}</button>'
 
@@ -2861,7 +2945,7 @@ for idx, r in enumerate(active_rows):
         player_html = (
             f'<div class="player-pill">'
             f'<audio id="{player_id}" src="{audio_url}" preload="none"></audio>'
-            f'<button class="player-play-btn" onclick="bsToggleAudio(\'{player_id}\', this); bsInitCardTrack(\'{player_id}\', \'{fill_id}\', \'{time_id}\');" aria-label="Воспроизвести">'
+            f'<button class="player-play-btn" data-audio-id="{player_id}" data-fill-id="{fill_id}" data-time-id="{time_id}" aria-label="Воспроизвести">'
             f'<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>'
             f'</button>'
             f'<div class="player-track">'
@@ -2888,7 +2972,7 @@ for idx, r in enumerate(active_rows):
         f'<span class="card-variant-title">{var_num_label}</span>'
         f'<span class="card-pill-tag">{cat_pill_label}</span>'
         f'<span class="card-views-txt">{views_s} просмотров</span>'
-        f'<a href="{escaped_v_url}" target="_blank" rel="noopener noreferrer" class="card-meta-muted" style="text-decoration: underline;" onclick="event.stopPropagation();">ID {html.escape(v_id)}</a>'
+        f'<a href="{escaped_v_url}" target="_blank" rel="noopener noreferrer" class="card-meta-muted card-meta-muted-link" style="text-decoration: underline;">ID {html.escape(v_id)}</a>'
         f'<span class="card-meta-muted">{tc_disp}</span>'
         f'</summary>'
         f'<div class="card-expanded-body">'
