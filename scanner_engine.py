@@ -83,7 +83,8 @@ class ScannerEngine:
                  ) -> Dict[str, Any]:
         """Executes full scan pipeline with configurable parallel processing threads."""
         is_all_time = (start_date is None and end_date is None)
-        account = "twitch.clown"
+        extracted = self.collector.extract_username(channel_url) if channel_url else ""
+        account = extracted if extracted else ("custom_urls" if custom_urls else "unknown")
 
         scan_id = self.db.create_scan(
             account=account,
@@ -345,7 +346,7 @@ class ScannerEngine:
             raise FileNotFoundError(f"Local audio file not found: {file_path}")
 
         if not url:
-            url = f"https://www.tiktok.com/@twitch.clown/video/{video_id}"
+            url = f"https://www.tiktok.com/@local/video/{video_id}"
         if not upload_date:
             upload_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -353,7 +354,7 @@ class ScannerEngine:
         self.db.save_video(
             video_id=video_id,
             url=url,
-            author="twitch.clown",
+            author="local",
             title=p.stem,
             views=views,
             upload_date=upload_date,

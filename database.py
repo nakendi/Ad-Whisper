@@ -259,10 +259,11 @@ class Database:
 
     def get_results_table_data(self, variant_filter: Optional[str] = None,
                                start_date: Optional[Union[date, datetime]] = None,
-                               end_date: Optional[Union[date, datetime]] = None) -> List[Dict[str, Any]]:
+                               end_date: Optional[Union[date, datetime]] = None,
+                               author: Optional[str] = None) -> List[Dict[str, Any]]:
         """Returns structured data for table display and export:
         Video | Views | Variant | Transcription | Timecode | Confidence
-        Filtered strictly by date range (inclusive) if provided.
+        Filtered strictly by date range (inclusive) and author if provided.
         """
         with self.get_connection() as conn:
             cursor = conn.cursor()
@@ -270,6 +271,7 @@ class Database:
             SELECT 
                 v.id as video_id,
                 v.url as video_url,
+                v.author as author,
                 v.views as views,
                 v.upload_date as upload_date,
                 v.upload_timestamp as upload_timestamp,
@@ -291,6 +293,11 @@ class Database:
             WHERE 1=1
             """
             params = []
+            if author and author.strip():
+                clean_auth = author.strip().lstrip("@").lower()
+                query += " AND LOWER(v.author) = ?"
+                params.append(clean_auth)
+
             if variant_filter:
                 if variant_filter == "all_matches":
                     query += " AND m.variant IN ('variant_1', 'variant_2', 'variant_3')"
@@ -347,9 +354,10 @@ class Database:
             return rows
 
     def get_summary_stats(self, start_date: Optional[Union[date, datetime]] = None,
-                          end_date: Optional[Union[date, datetime]] = None) -> Dict[str, int]:
-        """Calculates counts for dashboard overview, optionally restricted to a date range."""
-        all_collected = self.get_results_table_data("all_collected", start_date=start_date, end_date=end_date)
+                          end_date: Optional[Union[date, datetime]] = None,
+                          author: Optional[str] = None) -> Dict[str, int]:
+        """Calculates counts for dashboard overview, optionally restricted to a date range and author."""
+        all_collected = self.get_results_table_data("all_collected", start_date=start_date, end_date=end_date, author=author)
         return {
             "total_collected": len(all_collected),
             "total_views": sum(r.get("views", 0) for r in all_collected),

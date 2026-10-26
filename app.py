@@ -26,6 +26,7 @@ from database import Database
 from exporter import ReportExporter
 from matcher import PhraseMatcher
 from scanner_engine import ScannerEngine
+from collector import TikTokCollector
 
 # 1. Icon & Page Configuration
 icon_file_path = Path(__file__).resolve().parent / "app_icon.png"
@@ -1771,7 +1772,9 @@ with st.container(border=True):
     with col_acc:
         account_input = st.text_input(
             "Профиль или ссылка TikTok",
-            value="https://www.tiktok.com/@twitch.clown",
+            value=st.session_state.get("main_account_input", ""),
+            placeholder="https://www.tiktok.com/@username",
+            key="main_account_input",
             label_visibility="visible"
         )
     with col_c1:
@@ -1801,6 +1804,7 @@ with st.container(border=True):
             st.session_state.is_all_time = False
             st.session_state.start_date_picker = today - timedelta(days=6)
             st.session_state.end_date_picker = today
+            st.session_state.main_account_input = ""
             st.rerun()
 
     # ROW 2: Dates, Min Views, VRAM, Threads Slider, Run Scan Button
@@ -1851,7 +1855,7 @@ with st.container(border=True):
         )
 
     with col_btn:
-        can_run = True
+        can_run = bool(account_input and account_input.strip())
         if not st.session_state.is_all_time:
             if start_date_val and end_date_val and start_date_val > end_date_val:
                 can_run = False
@@ -1964,7 +1968,7 @@ with st.container(border=True):
             manual_urls_raw = st.text_area(
                 "Список ссылок:",
                 height=72,
-                placeholder="https://www.tiktok.com/@twitch.clown/video/...",
+                placeholder="https://www.tiktok.com/@username/video/...",
                 label_visibility="collapsed"
             )
 
@@ -2217,8 +2221,16 @@ if run_scan_btn:
 active_start_date = start_date_val if (start_date_val and not st.session_state.is_all_time) else None
 active_end_date = end_date_val if (end_date_val and not st.session_state.is_all_time) else None
 
-# All videos collected in range
-all_collected = db.get_results_table_data("all_collected", start_date=active_start_date, end_date=active_end_date)
+# Determine target account from input
+curr_target_user = TikTokCollector.extract_username(account_input) if account_input else ""
+
+# All videos collected in range (isolated per account to prevent data cross-contamination)
+if curr_target_user:
+    all_collected = db.get_results_table_data("all_collected", start_date=active_start_date, end_date=active_end_date, author=curr_target_user)
+elif manual_urls_raw.strip() or uploaded_audio_files:
+    all_collected = db.get_results_table_data("all_collected", start_date=active_start_date, end_date=active_end_date)
+else:
+    all_collected = []
 total_collected_cnt = len(all_collected)
 
 # Separate subsets
@@ -2476,14 +2488,30 @@ if sel_tile in ("keyser", "upgrade", "dotagrade", "all_promo"):
 
 # 10. RESULTS TABLE
 if not active_rows:
-    st.markdown('<div class="table-card" style="padding: 24px; color: #9A9C98;">В выбранной категории нет записей за указанный период.</div>', unsafe_allow_html=True)
+    if not curr_target_user:
+        st.markdown(
+            '<div class="table-card" style="padding: 36px; text-align: center; color: #9A9C98;">'
+            '<div style="font-size: 26px; margin-bottom: 8px;">🎬</div>'
+            '<div style="font-size: 15px; font-weight: 500; color: #ECEBE6; margin-bottom: 6px;">Готов к сканированию</div>'
+            '<div style="font-size: 13px;">Вставьте ссылку на профиль TikTok (например, <code>https://www.tiktok.com/@username</code>) и нажмите <b>«Запустить сканирование»</b>.</div>'
+            '</div>',
+            unsafe_allow_html=True
+        )
+    else:
+        st.markdown(
+            f'<div class="table-card" style="padding: 24px; color: #9A9C98;">'
+            f'В выбранной категории нет записей для аккаунта <b>@{html.escape(curr_target_user)}</b> за указанный период.'
+            f'</div>',
+            unsafe_allow_html=True
+        )
 else:
     table_rows_html = []
     play_icon_svg = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>'
 
     for r in active_rows:
         v_id = str(r.get("video_id") or "")
-        v_url = r.get("video_url") or f"https://www.tiktok.com/@twitch.clown/video/{v_id}"
+        auth_name = (r.get("author") or curr_target_user or "video").lstrip("@")
+        v_url = r.get("video_url") or f"https://www.tiktok.com/@{auth_name}/video/{v_id}"
         views_s = format_space_num(r.get("views", 0))
         u_date = str(r.get("upload_date") or "")[:16]
         tc = r.get("timecode") or "-"
@@ -2545,7 +2573,8 @@ for idx, r in enumerate(active_rows):
     u_date = str(r.get("upload_date") or "")
     tc = r.get("timecode") or "-"
     tc_disp = tc.replace(" - ", " – ") if tc != "-" else "–"
-    v_url = r.get("video_url") or f"https://www.tiktok.com/@twitch.clown/video/{v_id}"
+    auth_name = (r.get("author") or curr_target_user or "video").lstrip("@")
+    v_url = r.get("video_url") or f"https://www.tiktok.com/@{auth_name}/video/{v_id}"
     
     var_tag = r.get("variant")
     if var_tag == "variant_1":

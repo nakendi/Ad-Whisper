@@ -43,6 +43,21 @@ class TikTokCollector:
         return None
 
     @staticmethod
+    def extract_username(url_or_name: str) -> str:
+        """Extracts clean lowercase username from TikTok URL or handle."""
+        if not url_or_name:
+            return ""
+        s = url_or_name.strip()
+        m = re.search(r"@([a-zA-Z0-9_\.]+)", s)
+        if m:
+            return m.group(1).lstrip("@").lower()
+        m2 = re.search(r"tiktok\.com/([a-zA-Z0-9_\.]+)", s)
+        if m2:
+            return m2.group(1).lstrip("@").lower()
+        clean = s.split("?")[0].split("/")[0].lstrip("@").lower()
+        return clean
+
+    @staticmethod
     def extract_snowflake_timestamp(video_id: str) -> Optional[int]:
         """Extracts the exact Unix timestamp in seconds from a TikTok Snowflake ID.
         In TikTok's 64-bit ID architecture, bits 32-63 represent the Unix epoch timestamp.
@@ -200,8 +215,9 @@ class TikTokCollector:
         }
 
         # Step 1: Extract username
-        user_match = re.search(r"@([a-zA-Z0-9_\.]+)", channel_url)
-        username = user_match.group(1) if user_match else "twitch.clown"
+        username = self.extract_username(channel_url)
+        if not username:
+            username = "unknown"
 
         # Step 2: Try authenticated tt-dlp client if cookies provided
         if self.cookies_file and Path(self.cookies_file).exists():
@@ -259,7 +275,7 @@ class TikTokCollector:
                     for idx, entry in enumerate(entries):
                         if progress_callback:
                             progress_callback(f"Анализ видео {idx+1}/{len(entries)}...", idx+1, len(entries))
-                        video_info = self._process_entry(entry, start_date, end_date, min_views, result)
+                        video_info = self._process_entry(entry, start_date, end_date, min_views, result, target_user=username)
                         if video_info:
                             result["passed_filter"].append(video_info)
                     result["success"] = True
@@ -497,17 +513,19 @@ class TikTokCollector:
                     info = ydl.extract_info(url, download=False)
                     if not info:
                         continue
-                    video_info = self._process_entry(info, start_date, end_date, min_views, result)
+                    u_target = self.extract_username(url)
+                    video_info = self._process_entry(info, start_date, end_date, min_views, result, target_user=u_target)
                     if video_info:
                         result["passed_filter"].append(video_info)
                 except Exception as e:
                     logger.warning("Could not fetch info for %s: %s", url, e)
                     vid_id = self.parse_tiktok_id_from_url(url)
+                    u_target = self.extract_username(url) or "unknown"
                     if vid_id:
                         self.db.save_video(
                             video_id=vid_id,
                             url=url,
-                            author="unknown",
+                            author=u_target,
                             title="",
                             views=0,
                             upload_date="",
@@ -522,12 +540,15 @@ class TikTokCollector:
                        start_date: Optional[datetime],
                        end_date: Optional[datetime],
                        min_views: int,
-                       stats: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+                       stats: Dict[str, Any],
+                       target_user: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Parses a single video entry, applies view and date filters, and records in SQLite."""
         video_id = str(entry.get("id") or self.parse_tiktok_id_from_url(entry.get("url") or ""))
         url = entry.get("webpage_url") or entry.get("url")
         if not url and video_id:
-            url = f"https://www.tiktok.com/@twitch.clown/video/{video_id}"
+            raw_uploader = target_user or entry.get("uploader") or entry.get("channel") or "video"
+            clean_uploader = self.extract_username(str(raw_uploader)) or "video"
+            url = f"https://www.tiktok.com/@{clean_uploader}/video/{video_id}"
 
         if not video_id or not url:
             return None
@@ -562,7 +583,8 @@ class TikTokCollector:
         timestamp = ts or 0
         upload_date_formatted = upload_dt.strftime("%Y-%m-%d %H:%M:%S") if upload_dt else ""
 
-        author = entry.get("uploader") or entry.get("channel") or "twitch.clown"
+        raw_author = target_user or entry.get("uploader") or entry.get("channel") or self.extract_username(url) or "unknown"
+        author = self.extract_username(str(raw_author)) or "unknown"
         title = entry.get("title") or entry.get("description") or ""
 
         # Filter 1: Date range filter
