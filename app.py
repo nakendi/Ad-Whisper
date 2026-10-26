@@ -14,6 +14,7 @@ import base64
 import html
 import json
 import re
+import time
 import urllib.parse
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -2147,6 +2148,7 @@ def show_update_dialog():
                 st.rerun()
         with col_c2:
             if st.button("🚀 Обновить сейчас", key="btn_do_apply_upd", type="primary", use_container_width=True):
+                import time
                 with st.spinner("Загрузка обновления из GitHub..."):
                     ok, res_msg = updater.apply_update(remote_sha)
                 if ok:
@@ -2154,7 +2156,10 @@ def show_update_dialog():
                     get_cached_update_info.clear()
                     if "update" in st.query_params:
                         del st.query_params["update"]
-                    time.sleep(1)
+                    try:
+                        time.sleep(1)
+                    except Exception:
+                        pass
                     st.rerun()
                 else:
                     st.error(res_msg)
