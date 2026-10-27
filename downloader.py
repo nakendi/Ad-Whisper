@@ -6,8 +6,11 @@ and determines exact duration.
 
 import json
 import logging
+import os
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -17,6 +20,42 @@ from curl_cffi import requests as c_req
 from database import Database
 
 logger = logging.getLogger(__name__)
+
+CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
+
+def get_ffmpeg_dir() -> Optional[Path]:
+    """Finds directory containing ffmpeg executable within project, runtime, or PATH."""
+    base_dir = Path(__file__).resolve().parent
+    candidates = [
+        base_dir / "bin",
+        base_dir / "ffmpeg",
+        base_dir / "runtime" / "bin",
+        Path(sys.prefix) / "bin",
+        Path(sys.prefix) / "Scripts",
+    ]
+    for c in candidates:
+        if (c / "ffmpeg.exe").exists() or (c / "ffmpeg").exists():
+            return c
+    found = shutil.which("ffmpeg")
+    if found:
+        return Path(found).parent
+    return None
+
+def get_ffmpeg_path() -> str:
+    fdir = get_ffmpeg_dir()
+    if fdir:
+        cand = fdir / ("ffmpeg.exe" if sys.platform == "win32" else "ffmpeg")
+        if cand.exists():
+            return str(cand)
+    return "ffmpeg"
+
+def get_ffprobe_path() -> str:
+    fdir = get_ffmpeg_dir()
+    if fdir:
+        cand = fdir / ("ffprobe.exe" if sys.platform == "win32" else "ffprobe")
+        if cand.exists():
+            return str(cand)
+    return "ffprobe"
 
 class AudioDownloader:
     def __init__(self, db: Database, output_dir: str = "data/temp_audio",
@@ -32,14 +71,22 @@ class AudioDownloader:
     def probe_duration(self, audio_path: Path) -> float:
         """Determines audio duration in seconds using ffprobe."""
         try:
+            ffprobe_bin = get_ffprobe_path()
             cmd = [
-                "ffprobe",
+                ffprobe_bin,
                 "-v", "quiet",
                 "-print_format", "json",
                 "-show_format",
                 str(audio_path)
             ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=True)
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True,
+                creationflags=CREATE_NO_WINDOW
+            )
             data = json.loads(result.stdout)
             duration = float(data.get("format", {}).get("duration", 0.0))
             return duration
@@ -59,10 +106,12 @@ class AudioDownloader:
         if target_path.exists() and target_path.stat().st_size > 1024:
             duration = self.probe_duration(target_path)
             self.db.update_video_status(video_id, status="downloaded", duration=duration,
-                                       local_audio_path=str(target_path))
+                                        local_audio_path=str(target_path))
             return True, str(target_path), duration, None
 
-        ydl_opts = {
+        f_dir = get_ffmpeg_dir()
+
+        ydl_opts: Dict[str, Any] = {
             "format": "ba/b",  # Prefer audio-only, fallback to video if single stream
             "outtmpl": str(self.output_dir / f"{video_id}.%(ext)s"),
             "postprocessors": [{
@@ -78,6 +127,9 @@ class AudioDownloader:
             "no_warnings": True,
             "noplaylist": True,
         }
+
+        if f_dir:
+            ydl_opts["ffmpeg_location"] = str(f_dir)
 
         if self.cookies_file and Path(self.cookies_file).exists():
             ydl_opts["cookiefile"] = self.cookies_file
@@ -119,15 +171,22 @@ class AudioDownloader:
                 vids = re.findall(r'<video[^>]*src="([^"]+)"', r.text)
                 if vids:
                     direct_url = vids[0]
+                    ffmpeg_bin = get_ffmpeg_path()
                     cmd = [
-                        "ffmpeg", "-y",
+                        ffmpeg_bin, "-y",
                         "-i", direct_url,
                         "-vn",
                         "-ar", "16000",
                         "-ac", "1",
                         str(target_path)
                     ]
-                    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=45)
+                    res = subprocess.run(
+                        cmd,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        timeout=45,
+                        creationflags=CREATE_NO_WINDOW
+                    )
                     if res.returncode == 0 and target_path.exists() and target_path.stat().st_size > 1024:
                         logger.info("Fallback CDN stream download succeeded for %s", video_id)
                         return True

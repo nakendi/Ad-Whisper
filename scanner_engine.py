@@ -109,6 +109,9 @@ class ScannerEngine:
             pct = 0.05 + 0.10 * (curr / max(1, total))
             report(msg, pct)
 
+        # Determine target author for isolated stats
+        target_author = self.collector.extract_username(channel_url) if channel_url else None
+
         # Step 1: Collect videos
         if custom_urls:
             collect_res = self.collector.collect_from_urls(
@@ -142,7 +145,7 @@ class ScannerEngine:
                 "success": False,
                 "error_message": err_msg,
                 "waf_blocked": collect_res.get("waf_blocked", False),
-                "stats": self.db.get_summary_stats()
+                "stats": self.db.get_summary_stats(start_date=start_date, end_date=end_date, author=target_author)
             }
 
         passed_videos = collect_res["passed_filter"]
@@ -191,7 +194,7 @@ class ScannerEngine:
             "total_processed": processed_count,
             "excel_path": str(excel_path),
             "csv_path": str(csv_path),
-            "stats": self.db.get_summary_stats(start_date=start_date, end_date=end_date)
+            "stats": self.db.get_summary_stats(start_date=start_date, end_date=end_date, author=target_author)
         }
 
     def process_video(self, vid_id: str, url: str,

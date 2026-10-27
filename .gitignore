@@ -52,3 +52,9 @@ Thumbs.db
 
 # Test artifacts
 scratch/
+
+# Local FFmpeg binaries (packaged by installer, excluded from git due to 100MB limit)
+bin/
+ffmpeg/
+*.exe
+!AdWhisper.exe

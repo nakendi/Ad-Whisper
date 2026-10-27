@@ -11,7 +11,11 @@ import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
+from downloader import get_ffmpeg_path
+
 logger = logging.getLogger(__name__)
+
+CREATE_NO_WINDOW = 0x08000000 if sys.platform == "win32" else 0
 
 class AudioProcessor:
     def __init__(self, demucs_output_dir: str = "data/demucs_audio", device: str = "cuda"):
@@ -37,11 +41,11 @@ class AudioProcessor:
             return str(out)
 
         # ffmpeg audio filter:
-        # highpass=f=80, dynaudnorm=f=150:g=15:m=10.0:r=0.9:b=1
         filter_str = "highpass=f=80,dynaudnorm=f=150:g=15:m=10.0:r=0.9:b=1"
+        ffmpeg_bin = get_ffmpeg_path()
 
         cmd = [
-            "ffmpeg",
+            ffmpeg_bin,
             "-y",
             "-i", str(inp),
             "-af", filter_str,
@@ -51,7 +55,13 @@ class AudioProcessor:
         ]
 
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=CREATE_NO_WINDOW
+            )
             if res.returncode == 0 and out.exists() and out.stat().st_size > 1024:
                 logger.info("Audio preprocessed successfully: %s", out)
                 return str(out)
@@ -91,7 +101,13 @@ class AudioProcessor:
         ]
 
         try:
-            res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            res = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                creationflags=CREATE_NO_WINDOW
+            )
             expected_demucs_vocals = self.demucs_output_dir / "htdemucs" / inp.stem / "vocals.wav"
 
             # Fallback to CPU if CUDA execution failed (e.g. OutOfMemory)
@@ -106,19 +122,31 @@ class AudioProcessor:
                     "-d", "cpu",
                     str(inp)
                 ]
-                subprocess.run(cmd_cpu, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                subprocess.run(
+                    cmd_cpu,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    creationflags=CREATE_NO_WINDOW
+                )
 
             # Demucs places files in <output_dir>/htdemucs/<stem>/vocals.wav
             if expected_demucs_vocals.exists():
+                ffmpeg_bin = get_ffmpeg_path()
                 # Convert/copy to 16kHz mono wav at vocals_target
                 conv_cmd = [
-                    "ffmpeg", "-y",
+                    ffmpeg_bin, "-y",
                     "-i", str(expected_demucs_vocals),
                     "-ar", "16000",
                     "-ac", "1",
                     str(vocals_target)
                 ]
-                subprocess.run(conv_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                subprocess.run(
+                    conv_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    creationflags=CREATE_NO_WINDOW
+                )
                 
                 # Cleanup raw demucs intermediate directory
                 try:

@@ -94,6 +94,12 @@ def get_py_exec() -> str:
 
 def setup_dll_paths():
     base_dir = get_base_dir()
+    # 1. Prepend local FFmpeg directories to the front of PATH so system / WinGet / AppData are never used
+    for bin_cand in [base_dir / "bin", base_dir / "ffmpeg", base_dir / "runtime" / "bin"]:
+        if bin_cand.exists():
+            os.environ["PATH"] = str(bin_cand) + os.pathsep + os.environ.get("PATH", "")
+
+    # 2. Add NVIDIA CUDA DLLs
     for sp_candidate in [base_dir / "runtime" / "Lib" / "site-packages", base_dir / ".venv" / "Lib" / "site-packages"]:
         if sp_candidate.exists():
             for pkg in ["nvidia/cublas/bin", "nvidia/cudnn/bin"]:

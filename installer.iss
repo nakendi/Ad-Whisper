@@ -73,9 +73,13 @@ Source: "C:\Users\Oleksandr\AppData\Local\Programs\Python\Python311\Lib\*"; Dest
 ; Pre-installed AI & PyTorch CUDA Libraries from .venv
 Source: ".venv\Lib\site-packages\*"; DestDir: "{app}\runtime\Lib\site-packages"; Excludes: "playwright,playwright-*,__pycache__"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; Pre-packaged FFmpeg and FFprobe Binaries
-Source: "C:\Users\Oleksandr\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-essentials_build\bin\ffmpeg.exe"; DestDir: "{app}\runtime\bin"; Flags: ignoreversion
-Source: "C:\Users\Oleksandr\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg.Essentials_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-essentials_build\bin\ffprobe.exe"; DestDir: "{app}\runtime\bin"; Flags: ignoreversion
+; Pre-packaged FFmpeg and FFprobe Binaries (from local project bin, NO AppData dependency)
+Source: "bin\ffmpeg.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "bin\ffprobe.exe"; DestDir: "{app}\bin"; Flags: ignoreversion
+Source: "bin\ffmpeg.exe"; DestDir: "{app}\ffmpeg"; Flags: ignoreversion
+Source: "bin\ffprobe.exe"; DestDir: "{app}\ffmpeg"; Flags: ignoreversion
+Source: "bin\ffmpeg.exe"; DestDir: "{app}\runtime\bin"; Flags: ignoreversion
+Source: "bin\ffprobe.exe"; DestDir: "{app}\runtime\bin"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"

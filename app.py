@@ -8,8 +8,15 @@ Strict compliance with Design Specification:
 - Inline working HTML5 audio player in table and publication cards.
 """
 
+import os
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+# Prepend local FFmpeg directories to front of PATH so WinGet/AppData are never used
+_app_dir = Path(__file__).resolve().parent
+for _cand in [_app_dir / "bin", _app_dir / "ffmpeg", _app_dir / "runtime" / "bin"]:
+    if _cand.exists():
+        os.environ["PATH"] = str(_cand) + os.pathsep + os.environ.get("PATH", "")
 import base64
 import html
 import json

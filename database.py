@@ -171,11 +171,17 @@ class Database:
                 else:
                     new_status = status
 
+                # If status is set to pending, clear out any old error message so it retries cleanly
+                if new_status == "pending":
+                    effective_err = None
+                else:
+                    effective_err = error_message if error_message is not None else row["error_message"]
+
                 cursor.execute("""
                 UPDATE videos 
-                SET views = ?, upload_date = ?, upload_timestamp = ?, status = ?, scanned_at = ?, error_message = COALESCE(?, error_message)
+                SET views = ?, upload_date = ?, upload_timestamp = ?, status = ?, scanned_at = ?, error_message = ?
                 WHERE id = ?
-                """, (views, upload_date, upload_timestamp, new_status, now, error_message, video_id))
+                """, (views, upload_date, upload_timestamp, new_status, now, effective_err, video_id))
                 conn.commit()
                 return False
             else:
